@@ -1,0 +1,7 @@
+# Keep the build context small and reproducible: only what the image needs.
+.git
+.github
+.vscode
+plans
+.data
+.DS_Store

@@ -1,0 +1,31 @@
+{
+  "name": "@dldc/deployer",
+  "version": "0.1.0",
+  "license": "MIT",
+  "exports": "./src/mod.ts",
+  "tasks": {
+    "deps:outdated": "deno outdated",
+    "deps:update": "deno outdated --update --latest --interactive",
+    "check": "deno fmt --check . && deno lint . && deno check .",
+    "start": "deno run --allow-all ./src/main.ts",
+    "test:run": "deno test -A"
+  },
+  "imports": {
+    "@db/sqlite": "jsr:@db/sqlite@^0.13.0",
+    "@dldc/pubsub": "jsr:@dldc/pubsub@^7.1.0",
+    "@dldc/ts-api": "jsr:@dldc/ts-api@^2.1.0",
+    "@dldc/zendb": "jsr:@dldc/zendb@^12.2.0",
+    "@dldc/zendb-db-sqlite": "jsr:@dldc/zendb-db-sqlite@^5.1.0",
+    "@hono/hono": "jsr:@hono/hono@^4.13.12",
+    "@opentelemetry/api": "npm:@opentelemetry/api@^1.9.1",
+    "@std/path": "jsr:@std/path@^1.1.6",
+    "@valibot/valibot": "jsr:@valibot/valibot@^1.5.0",
+    "nanoid": "npm:nanoid@^6.0.1",
+    "regexparam": "npm:regexparam@^3.0.0",
+    "superjson": "npm:superjson@^2.2.6",
+    "type-fest": "npm:type-fest@^5.10.0"
+  },
+  "lint": {
+    "rules": { "exclude": ["no-explicit-any"] }
+  }
+}
