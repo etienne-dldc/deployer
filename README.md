@@ -1,14 +1,14 @@
 # @dldc/deployer
 
 Standalone headless deploy engine for **Docker Swarm**. No UI — it exposes a
-type-safe RPC API
-([ts-api](https://github.com/dldc-packages/ts-api)), an SSE event stream, and a
-tar-deploy endpoint. Any UI (SPA, CLI) is a separate consumer of this API.
+type-safe RPC API ([ts-api](https://github.com/dldc-packages/ts-api)), an SSE
+event stream, and a tar-deploy endpoint. Any UI (SPA, CLI) is a separate
+consumer of this API.
 
 This repository is the standalone core that used to live inside
 [tower-control](https://github.com/etienne-dldc/tower-control). See
-[`plans/core-standalone`](./plans/core-standalone) for the (adapted) implementation
-plan.
+[`plans/core-standalone`](./plans/core-standalone) for the (adapted)
+implementation plan.
 
 ## Status
 
@@ -18,12 +18,12 @@ per the plan. Not yet production-ready.
 
 ## Endpoints
 
-| Endpoint | Protocol | Purpose |
-|---|---|---|
-| `POST /api/graph` | ts-api RPC (`{ path, args }` JSON, superjson transport) | All queries + mutations |
-| `GET /api/events` | SSE (JSON events) | Real-time subscription to deploys, steps, queue, services, backups |
-| `POST /api/tar-deploy` | Binary upload (bearer auth) | Accept tar archive, queue a `"tar"` deploy |
-| `GET /status` | Plain HTTP | Liveness probe (used by the container healthcheck) |
+| Endpoint               | Protocol                                                | Purpose                                                            |
+| ---------------------- | ------------------------------------------------------- | ------------------------------------------------------------------ |
+| `POST /api/graph`      | ts-api RPC (`{ path, args }` JSON, superjson transport) | All queries + mutations                                            |
+| `GET /api/events`      | SSE (JSON events)                                       | Real-time subscription to deploys, steps, queue, services, backups |
+| `POST /api/tar-deploy` | Binary upload (bearer auth)                             | Accept tar archive, queue a `"tar"` deploy                         |
+| `GET /status`          | Plain HTTP                                              | Liveness probe (used by the container healthcheck)                 |
 
 ## Running with Docker
 
@@ -41,11 +41,11 @@ docker run --rm \
 
 ### Configuration (env vars)
 
-| Variable | Default | Description |
-|---|---|---|
-| `PORT` | `3000` | HTTP listen port |
-| `DATABASE_PATH` | `/src/data/deployer/db.sqlite` | SQLite database path |
-| `TRIGGER_TOKEN` | *(none)* | Bearer token required by `/api/tar-deploy` |
+| Variable        | Default                        | Description                                |
+| --------------- | ------------------------------ | ------------------------------------------ |
+| `PORT`          | `3000`                         | HTTP listen port                           |
+| `DATABASE_PATH` | `/src/data/deployer/db.sqlite` | SQLite database path                       |
+| `TRIGGER_TOKEN` | _(none)_                       | Bearer token required by `/api/tar-deploy` |
 
 Planned (mirrors tower-control): `DEPLOY_ENVIRONMENT`, `DEV_MODE`, `REPO_DIR`,
 `SECRETS_DIR`, `DATA_DIR`, `REGISTRY_TOKEN`, `DEPLOY_CONCURRENCY`, and the

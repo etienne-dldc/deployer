@@ -40,5 +40,4 @@ export const ROUTES = {
   status: createRoute("/status"),
   apiGraph: createRoute("/api/graph"),
   apiEvents: createRoute("/api/events"),
-  apiTarDeploy: createRoute("/api/tar-deploy"),
 };
