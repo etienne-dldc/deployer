@@ -4,15 +4,12 @@ import { c as createTarStream } from "tar";
 /** Must match the controller's `MAX_APPLY_BYTES`. */
 const MAX_ARCHIVE_BYTES = 20 * 1024 * 1024;
 
-const EXCLUDED = new Set([
-  ".git",
-  "node_modules",
-  ".deployer",
-  "dist",
-  "build",
-  "coverage",
-  ".DS_Store",
-]);
+/**
+ * What a deploy repo never needs shipped: version control, installed
+ * dependencies and the controller's own state. Build output stays in unless the
+ * repo ignores it, because the committed tree is what the image is built from.
+ */
+const EXCLUDED = new Set([".git", "node_modules", ".deployer", ".DS_Store"]);
 
 interface DeployResult {
   runId: string;

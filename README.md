@@ -73,8 +73,8 @@ A deploy repo is a directory with a `Dockerfile` and deploy code:
 DEPLOYER_URL=http://127.0.0.1:8787 DEPLOYER_TOKEN=dev pnpm deploy examples/hello
 ```
 
-The CLI packs the directory (skipping `.git`, `node_modules`, `dist`, `build`,
-…), posts it to `/api/apply`, and prints the run log. The controller then:
+The CLI packs the directory (skipping `.git`, `node_modules`, `.deployer`),
+posts it to `/api/apply`, and prints the run log. The controller then:
 
 1. unpacks the tar into the deploy repository and commits it (every deploy is a
    commit, even when nothing changed);
