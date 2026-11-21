@@ -6,5 +6,8 @@ plans
 node_modules
 **/node_modules
 **/dist
+# The runner base image copies the built harness from dist/.
+!dist/harness
+!dist/harness/**
 coverage
 .DS_Store
