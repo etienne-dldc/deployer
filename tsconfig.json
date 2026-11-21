@@ -15,5 +15,11 @@
     "noEmit": true,
     "isolatedModules": true
   },
-  "include": ["sdk/**/*.ts", "controller/**/*.ts", "scripts/**/*.ts", "vite.config.ts"]
+  "include": [
+    "sdk/**/*.ts",
+    "controller/**/*.ts",
+    "cli/**/*.ts",
+    "scripts/**/*.ts",
+    "vite.config.ts"
+  ]
 }

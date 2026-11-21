@@ -51,8 +51,10 @@
     "test": "vp test run",
     "test:watch": "vp test",
     "test:docker": "DEPLOYER_TEST_DOCKER=1 vp test run integration",
-    "base:build": "docker build -f docker/runner-base/Dockerfile -t deployer-runner-base:dev .",
-    "docker:build": "docker build -t ghcr.io/etienne-dldc/deployer:dev ."
+    "base:build": "pnpm pack:sdk && docker build -f docker/runner-base/Dockerfile -t deployer-runner-base:dev .",
+    "docker:build": "docker build -t ghcr.io/etienne-dldc/deployer:dev .",
+    "deploy": "tsx cli/main.ts deploy",
+    "deployer": "tsx cli/main.ts"
   },
   "dependencies": {
     "@dldc/ts-api": "^5.0.0"
@@ -63,6 +65,7 @@
     "@types/node": "^24.0.0",
     "dockerode": "^5.0.1",
     "hono": "^4.13.13",
+    "tar": "^7.5.23",
     "tsx": "^4.19.0",
     "typescript": "^6.0.3",
     "vite-plus": "^1.1.0",

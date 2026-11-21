@@ -1,9 +1,16 @@
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 
 export interface Config {
   port: number;
   host: string;
   publicToken: string;
+  /**
+   * Controller root holding `repo/` (the deploy git repository) and `run/`
+   * (socket, scratch space). It must be a host path mounted at the same
+   * location in the controller and in deploy run containers, so the bind mounts
+   * the controller passes to Swarm resolve on the host.
+   */
+  rootDir: string;
   /** Path of the internal Unix socket used by deploy-code runs. */
   socketPath: string;
   /** Docker socket the controller connects to. */
@@ -12,7 +19,7 @@ export interface Config {
 
 const DEFAULT_PORT = 8787;
 const DEFAULT_HOST = "0.0.0.0";
-const DEFAULT_SOCKET_PATH = ".deployer/run/deployer.sock";
+const DEFAULT_ROOT_DIR = ".deployer";
 const DEFAULT_DOCKER_SOCKET = "/var/run/docker.sock";
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -21,11 +28,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     throw new Error("DEPLOYER_TOKEN is required; refusing to start without it");
   }
 
+  const rootDir = absolutePath(env.DEPLOYER_DATA_DIR, DEFAULT_ROOT_DIR);
+
   return {
     port: parsePort(env.PORT),
     host: env.HOST?.trim() || DEFAULT_HOST,
     publicToken,
-    socketPath: absolutePath(env.DEPLOYER_SOCKET_PATH, DEFAULT_SOCKET_PATH),
+    rootDir,
+    socketPath: absolutePath(env.DEPLOYER_SOCKET_PATH, join(rootDir, "run", "deployer.sock")),
     dockerSocket: env.DOCKER_SOCKET?.trim() || DEFAULT_DOCKER_SOCKET,
   };
 }
