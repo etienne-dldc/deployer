@@ -14,6 +14,11 @@ export const RESERVED_LABEL_PREFIX = "com.deployer.";
  * Every managed field is written from the config: `update` is a full
  * replacement of the managed subset, not a merge. Optional fields that are
  * absent stay absent so an inspect and the desired config compare cleanly.
+ *
+ * `command` maps to `ContainerSpec.Args`, like Compose and `docker run`: it
+ * replaces the image's CMD and keeps its ENTRYPOINT. Writing `ContainerSpec.Command`
+ * instead would replace the ENTRYPOINT, which is not what "command" means for
+ * images that ship one (`exec: "--port": not found`).
  */
 export function toSwarm(config: ServiceConfig): ServiceSpec {
   const env = toMap(config.env, "env var");
@@ -30,7 +35,7 @@ export function toSwarm(config: ServiceConfig): ServiceSpec {
   const containerSpec: ContainerSpec = { Image: config.image };
 
   if (config.command !== undefined && config.command.length > 0) {
-    containerSpec.Command = [...config.command];
+    containerSpec.Args = [...config.command];
   }
   if (Object.keys(env).length > 0) {
     containerSpec.Env = Object.keys(env)
@@ -76,7 +81,7 @@ export function fromSwarm(spec: ServiceSpec): ServiceConfig {
     replicas: spec.Mode?.Replicated?.Replicas ?? 1,
   };
 
-  const command = containerSpec.Command;
+  const command = containerSpec.Args;
   if (command !== undefined && command.length > 0) {
     config.command = [...command];
   }

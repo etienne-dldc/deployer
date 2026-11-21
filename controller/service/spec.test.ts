@@ -21,7 +21,7 @@ describe("toSwarm", () => {
       TaskTemplate: {
         ContainerSpec: {
           Image: "traefik/whoami:v1.10",
-          Command: ["/bin/sh", "-c", "whoami"],
+          Args: ["/bin/sh", "-c", "whoami"],
           Env: ["EMPTY=", "EQUALS=a=b", "WHOAMI_NAME=hello"],
         },
       },
@@ -88,6 +88,10 @@ describe("fromSwarm", () => {
       TaskTemplate: {
         ContainerSpec: {
           Image: "nginx",
+          // An entrypoint override is outside the managed type: only Args is
+          // the `command`.
+          Command: ["/custom-entrypoint"],
+          Args: ["--port", "80"],
           Env: ["B=2", "A=1"],
           Labels: { "com.docker.stack.image": "nginx" },
         },
@@ -105,6 +109,7 @@ describe("fromSwarm", () => {
     expect(fromSwarm(live)).toEqual({
       image: "nginx",
       replicas: 1,
+      command: ["--port", "80"],
       env: [
         { name: "A", value: "1" },
         { name: "B", value: "2" },

@@ -25,6 +25,10 @@ export interface ServicePort {
 export interface ServiceConfig {
   image: string;
   replicas: number;
+  /**
+   * Arguments for the image's entrypoint. Replaces the image's CMD and keeps
+   * its ENTRYPOINT (`docker run` / Compose `command` semantics).
+   */
   command?: string[];
   env?: EnvVar[];
   ports?: ServicePort[];
