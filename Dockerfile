@@ -1,46 +1,46 @@
 # syntax=docker/dockerfile:1
 
-# ??-- deployer -- headless deploy engine (Docker Swarm)
-#
-# Runs the app from source with Deno. The deploy pipeline shells out to the
-# `git` CLI (to commit tar extracts), so git is installed explicitly — it is
-# not part of the official denoland/deno image.
-#
-# Runtime mounts (provided by the operator, see plans/core-standalone):
-#   /src/source  — the synced source repo (includes the deploy/ compose stacks)
-#   /src/secrets — secrets dir (.env, docker config)
-#   /src/data    — sqlite db, uploaded tars, backups
-#
-# The Docker Engine socket is also expected to be mounted
-# (/var/run/docker.sock) — the pipeline drives Docker over the API.
+# Controller image. It runs the deployer code, not the deploy code it launches.
+# The deploy code runs in an ephemeral container built from the runner base.
 
-FROM denoland/deno:2.9.7
+FROM node:26-slim AS build
+
+RUN npm install -g pnpm@12.14.0
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
+
+COPY tsconfig.json vite.config.ts ./
+COPY controller ./controller
+COPY sdk ./sdk
+RUN pnpm build:controller
+
+FROM node:26-slim AS runtime
 
 LABEL org.opencontainers.image.title="@dldc/deployer" \
-      org.opencontainers.image.description="Standalone headless deploy engine for Docker Swarm" \
+      org.opencontainers.image.description="Code-as-deployment engine for Docker Swarm" \
       org.opencontainers.image.url="https://github.com/etienne-dldc/deployer" \
       org.opencontainers.image.source="https://github.com/etienne-dldc/deployer" \
       org.opencontainers.image.licenses="MIT"
 
-# git is required by the deploy pipeline (gitClient commits tar extracts)
+# git is needed by the deploy pipeline (tar extract -> commit). The controller
+# talks to Docker over the mounted socket, so the Docker CLI is not required.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+ENV NODE_ENV=production
+
 WORKDIR /app
 
-# Cache dependencies first so app changes don't re-resolve them
-COPY deno.json deno.lock ./
-COPY src ./src
-RUN deno cache src/main.ts
+COPY --from=build /app/dist/controller ./dist
 
-EXPOSE 3000
+EXPOSE 8787
+VOLUME ["/app/.deployer"]
 
-# used by the HEALTHCHECK below (GET /status)
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD deno eval --allow-net "const r = await fetch('http://127.0.0.1:3000/status'); Deno.exit(r.ok ? 0 : 1)"
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+  CMD node -e "const port = process.env.PORT ?? 8787; fetch('http://127.0.0.1:' + port + '/status').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 
-# sqlite db, uploaded tars and the synced source repo are external state
-VOLUME ["/src/source", "/src/secrets", "/src/data"]
-
-CMD ["deno", "run", "--allow-all", "./src/main.ts"]
+CMD ["node", "dist/main.mjs"]

@@ -1,1 +1,9 @@
-.data/
+node_modules/
+dist/
+build/
+coverage/
+.vitest/
+pnpm-debug.log*
+*.tgz
+.deployer/
+.DS_Store

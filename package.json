@@ -1,0 +1,83 @@
+{
+  "name": "@dldc/deployer-sdk",
+  "version": "0.1.0",
+  "description": "SDK for @dldc/deployer — the code-as-deployment engine for Docker Swarm",
+  "keywords": [
+    "deployer",
+    "deployment",
+    "docker",
+    "swarm"
+  ],
+  "homepage": "https://github.com/etienne-dldc/deployer#readme",
+  "bugs": {
+    "url": "https://github.com/etienne-dldc/deployer/issues"
+  },
+  "license": "MIT",
+  "author": "Etienne Dldc <e.deladonchamps@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/etienne-dldc/deployer.git"
+  },
+  "files": [
+    "dist/sdk"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "types": "./dist/sdk/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/sdk/index.d.mts",
+      "default": "./dist/sdk/index.mjs"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "directory": "build/npm",
+    "registry": "https://registry.npmjs.org"
+  },
+  "scripts": {
+    "dev": "tsx watch controller/main.ts",
+    "build": "rm -rf dist build/npm && vp pack && pnpm stage:sdk",
+    "build:sdk": "vp pack -F sdk",
+    "build:controller": "vp pack -F controller",
+    "stage:sdk": "tsx scripts/stage-sdk.ts",
+    "pack:sdk": "pnpm build:sdk && pnpm stage:sdk",
+    "pack:tarball": "cd build/npm && npm pack",
+    "publish:sdk": "pnpm pack:sdk && cd build/npm && npm publish --access public",
+    "check": "vp check",
+    "lint": "vp lint",
+    "fmt": "vp fmt",
+    "test": "vp test run",
+    "test:watch": "vp test",
+    "base:build": "docker build -f docker/runner-base/Dockerfile -t deployer-runner-base:dev .",
+    "docker:build": "docker build -t ghcr.io/etienne-dldc/deployer:dev ."
+  },
+  "dependencies": {
+    "@dldc/ts-api": "^5.0.0"
+  },
+  "devDependencies": {
+    "@hono/node-server": "^2.1.5",
+    "@types/node": "^24.0.0",
+    "hono": "^4.13.13",
+    "tsx": "^4.19.0",
+    "typescript": "^6.0.3",
+    "vite-plus": "^1.1.0",
+    "vitest": "^5.0.3"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.14.0",
+      "onFail": "warn"
+    },
+    "runtime": {
+      "name": "node",
+      "version": "^26.0.0",
+      "onFail": "warn"
+    }
+  },
+  "engines": {
+    "node": "^22.18.0 || ^24.11.0 || >=26.0.0"
+  },
+  "packageManager": "pnpm@12.14.0"
+}

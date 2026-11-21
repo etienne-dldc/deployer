@@ -1,0 +1,3 @@
+# Single-package repository. This file only carries pnpm build approvals.
+allowBuilds:
+  esbuild: true

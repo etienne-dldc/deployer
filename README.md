@@ -1,72 +1,114 @@
 # @dldc/deployer
 
-Standalone headless deploy engine for **Docker Swarm**. No UI — it exposes a
-type-safe RPC API ([ts-api](https://github.com/dldc-packages/ts-api)), an SSE
-event stream, and a tar-deploy endpoint. Any UI (SPA, CLI) is a separate
-consumer of this API.
+Headless code-as-deployment engine for Docker Swarm.
 
-This repository is the standalone core that used to live inside
-[tower-control](https://github.com/etienne-dldc/tower-control). See
-[`plans/core-standalone`](./plans/core-standalone) for the (adapted)
-implementation plan.
+The deployable unit is not a desired-state document. It is the code in **one
+deploy repository per environment**, executed against the live system through a
+small controller API. Every deploy is a git commit; `git log` is the history and
+the debugging UI.
+
+This repository contains:
+
+| Path | What |
+| --- | --- |
+| `controller` | The Hono controller server; it owns the Docker/Swarm side. Private, shipped as a Docker image. |
+| `sdk` | The SDK used by deploy code. Its build is the only npm artifact. |
+| `scripts/stage-sdk.ts` | Creates `build/npm`, the SDK-only publish folder, with a generated `package.json`. |
+| `docker/runner-base` | Base image for deploy-code containers. |
+| `plans/` | Architecture and MVP design notes. |
 
 ## Status
 
-Early development. The scaffolding boots and serves the three endpoints; the
-deploy pipeline (tar → git → plan → Docker Swarm) is being built slice by slice
-per the plan. Not yet production-ready.
-
-## Endpoints
-
-| Endpoint               | Protocol                                                | Purpose                                                            |
-| ---------------------- | ------------------------------------------------------- | ------------------------------------------------------------------ |
-| `POST /api/graph`      | ts-api RPC (`{ path, args }` JSON, superjson transport) | All queries + mutations                                            |
-| `GET /api/events`      | SSE (JSON events)                                       | Real-time subscription to deploys, steps, queue, services, backups |
-| `POST /api/tar-deploy` | Binary upload (bearer auth)                             | Accept tar archive, queue a `"tar"` deploy                         |
-| `GET /status`          | Plain HTTP                                              | Liveness probe (used by the container healthcheck)                 |
-
-## Running with Docker
-
-```sh
-docker run --rm \
-  -p 3000:3000 \
-  -e DATABASE_PATH=/src/data/deployer/db.sqlite \
-  -e TRIGGER_TOKEN=change-me \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  -v /path/to/repo:/src/source \
-  -v /path/to/secrets:/src/secrets \
-  -v /path/to/data:/src/data \
-  ghcr.io/etienne-dldc/deployer:<version>
-```
-
-### Configuration (env vars)
-
-| Variable        | Default                        | Description                                |
-| --------------- | ------------------------------ | ------------------------------------------ |
-| `PORT`          | `3000`                         | HTTP listen port                           |
-| `DATABASE_PATH` | `/src/data/deployer/db.sqlite` | SQLite database path                       |
-| `TRIGGER_TOKEN` | _(none)_                       | Bearer token required by `/api/tar-deploy` |
-
-Planned (mirrors tower-control): `DEPLOY_ENVIRONMENT`, `DEV_MODE`, `REPO_DIR`,
-`SECRETS_DIR`, `DATA_DIR`, `REGISTRY_TOKEN`, `DEPLOY_CONCURRENCY`, and the
-`BACKUP_*` block.
-
-### Mounts
-
-- `/src/source` — the synced source repo (includes the `deploy/` compose stacks)
-- `/src/secrets` — secrets dir (`.env`, Docker config)
-- `/src/data` — sqlite db, uploaded tars, backups
-- `/var/run/docker.sock` — Docker Engine socket (the pipeline drives Swarm over
-  the Docker API)
+Scaffolding for the MVP. The controller starts, serves `/status`, and exposes
+`POST /api/apply` behind `DEPLOYER_TOKEN`; the apply pipeline itself
+(tar → git commit → image build → isolated run) lands next.
 
 ## Development
 
 ```sh
-deno task check    # fmt + lint + type-check (CI gate)
-deno task start    # run the server locally (--allow-all)
-deno task test:run
+pnpm install
+pnpm check        # format, lint, type-check
+pnpm test
+pnpm build        # controller + SDK + build/npm publish staging
 ```
 
-Published to [JSR](https://jsr.io/@dldc/deployer) and
-[ghcr.io/etienne-dldc/deployer](https://github.com/etienne-dldc/deployer/pkgs/container/deployer)
-via GitHub Actions on push to `main`.
+Run the controller locally:
+
+```sh
+DEPLOYER_TOKEN=dev pnpm dev
+```
+
+| Env | Default | Meaning |
+| --- | --- | --- |
+| `DEPLOYER_TOKEN` | required | Bearer token for `POST /api/apply` |
+| `PORT` | `8787` | HTTP port |
+| `HOST` | `0.0.0.0` | HTTP bind address |
+
+The controller refuses to start without `DEPLOYER_TOKEN`.
+
+## Docker
+
+Build the controller image:
+
+```sh
+pnpm docker:build
+```
+
+Run it:
+
+```sh
+docker run --rm \
+  -p 8787:8787 \
+  -e DEPLOYER_TOKEN=change-me \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v "$PWD/.deployer:/app/.deployer" \
+  ghcr.io/etienne-dldc/deployer:dev
+```
+
+Images are published to
+`ghcr.io/etienne-dldc/deployer` by `.github/workflows/docker-publish.yml` on
+pushes to `main` and tags.
+
+Build the deploy-code base image:
+
+```sh
+pnpm base:build   # deployer-runner-base:dev
+```
+
+## SDK
+
+The repository is one package; the npm artifact is generated in `build/npm` and
+is the only thing published.
+
+```sh
+pnpm pack:sdk
+cd build/npm && npm pack --dry-run
+```
+
+`scripts/stage-sdk.ts` copies `dist/sdk`, scans the emitted `.mjs` and `.d.mts`
+files for package imports, and generates a `package.json` containing only the
+dependencies the SDK actually uses. The controller is built into
+`dist/controller` for the Docker image and is never part of the tarball.
+
+Deploy code installs the SDK like any other dependency:
+
+```sh
+pnpm add @dldc/deployer-sdk
+```
+
+The API is a ts-api `Graph` defined in `sdk/graph.ts`. The SDK exports the
+typed query builder `q`, `executeQuery`, and `equal`:
+
+```ts
+import { executeQuery, q } from "@dldc/deployer-sdk";
+
+const version = await executeQuery(q.Graph.meta.version());
+```
+
+`executeQuery` reads `DEPLOYER_SOCKET` and `DEPLOYER_RUN_TOKEN` from the run
+environment; the controller uses the same `Graph` as its resolver contract.
+
+## Design
+
+- [`plans/code-deployment-architecture.md`](./plans/code-deployment-architecture.md)
+- [`plans/code-deployment-mvp.md`](./plans/code-deployment-mvp.md)

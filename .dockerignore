@@ -1,7 +1,11 @@
-# Keep the build context small and reproducible: only what the image needs.
 .git
 .github
 .vscode
 plans
-.data
+.deployer
+node_modules
+**/node_modules
+**/dist
+**/build
+coverage
 .DS_Store
