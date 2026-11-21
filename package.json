@@ -37,9 +37,10 @@
   },
   "scripts": {
     "dev": "tsx watch controller/main.ts",
-    "build": "rm -rf dist build/npm && vp pack && pnpm stage:sdk",
+    "build": "rm -rf dist build/npm && vp pack && pnpm copy:schema && pnpm stage:sdk",
     "build:sdk": "vp pack -F sdk",
-    "build:controller": "vp pack -F controller",
+    "build:controller": "vp pack -F controller && pnpm copy:schema",
+    "copy:schema": "cp sdk/graph.ts dist/controller/graph.ts",
     "stage:sdk": "tsx scripts/stage-sdk.ts",
     "pack:sdk": "pnpm build:sdk && pnpm stage:sdk",
     "pack:tarball": "cd build/npm && npm pack",
@@ -57,7 +58,9 @@
   },
   "devDependencies": {
     "@hono/node-server": "^2.1.5",
+    "@types/dockerode": "^4.0.2",
     "@types/node": "^24.0.0",
+    "dockerode": "^5.0.1",
     "hono": "^4.13.13",
     "tsx": "^4.19.0",
     "typescript": "^6.0.3",

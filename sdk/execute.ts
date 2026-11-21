@@ -1,6 +1,7 @@
 import { connect as connectSocket } from "node:net";
 import { query, queryToObject, type TQuery } from "@dldc/ts-api/client";
 import type { Graph } from "./graph.ts";
+import { isInternalResponse } from "./protocol.ts";
 
 /**
  * The typed ts-api query builder for the deployer Graph.
@@ -25,7 +26,10 @@ export interface ExecuteQueryOptions {
  * newline-delimited JSON:
  *
  *   request:  { token, path: ["Graph", "service", "inspect"], args: ["hello"] }
- *   response: <the JSON result of the ts-api query>
+ *   response: { ok: true, result } | { ok: false, error: { kind, message } }
+ *
+ * A failed call rejects with the controller's message instead of returning an
+ * error object, so deploy code can let a bad apply stop the run.
  *
  * A fresh connection is opened per request. That keeps the client simple and
  * makes a failed request easy to isolate; the controller can keep serving other
@@ -48,7 +52,23 @@ export async function executeQuery<T>(
   const { path, args } = queryToObject(builtQuery);
   const raw = await send(socketPath, `${JSON.stringify({ token, path, args })}\n`);
 
-  return JSON.parse(raw) as T;
+  let response: unknown;
+  try {
+    response = JSON.parse(raw);
+  } catch {
+    throw new Error(`deployer returned a malformed response: ${JSON.stringify(raw.slice(0, 200))}`);
+  }
+
+  if (!isInternalResponse(response)) {
+    throw new Error(
+      `deployer returned an unexpected response: ${JSON.stringify(raw.slice(0, 200))}`,
+    );
+  }
+  if (!response.ok) {
+    throw new Error(`${response.error.kind}: ${response.error.message}`);
+  }
+
+  return response.result as T;
 }
 
 function send(socketPath: string, payload: string): Promise<string> {

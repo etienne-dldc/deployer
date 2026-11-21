@@ -1,3 +1,6 @@
 # Single-package repository. This file only carries pnpm build approvals.
 allowBuilds:
+  cpu-features: false
   esbuild: true
+  protobufjs: false
+  ssh2: false

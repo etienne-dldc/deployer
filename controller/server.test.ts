@@ -7,6 +7,8 @@ const config: Config = {
   port: 0,
   host: "127.0.0.1",
   publicToken: "test-token",
+  socketPath: "/tmp/deployer-test.sock",
+  dockerSocket: "/var/run/docker.sock",
 };
 
 const servers: ReturnType<typeof createServer>[] = [];

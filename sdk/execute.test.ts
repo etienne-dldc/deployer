@@ -29,9 +29,15 @@ describe("executeQuery", () => {
         const request = JSON.parse(body.slice(0, newline)) as Request;
         requests.push(request);
 
-        const result = request.path.join(".") === "Graph.service.create" ? { version: 1 } : "1";
+        if (request.path.join(".") === "Graph.service.inspect") {
+          socket.end(
+            `${JSON.stringify({ ok: false, error: { kind: "Error", message: "boom" } })}\n`,
+          );
+          return;
+        }
 
-        socket.end(`${JSON.stringify(result)}\n`);
+        const result = request.path.join(".") === "Graph.service.create" ? { version: 1 } : "1";
+        socket.end(`${JSON.stringify({ ok: true, result })}\n`);
       });
     });
 
@@ -55,8 +61,11 @@ describe("executeQuery", () => {
           options,
         ),
       ).resolves.toEqual({ version: 1 });
+      await expect(executeQuery(q.Graph.service.inspect("hello"), options)).rejects.toThrow(
+        "Error: boom",
+      );
 
-      expect(requests).toHaveLength(2);
+      expect(requests).toHaveLength(3);
       expect(requests[0]).toMatchObject({
         token: "run-token",
         path: ["Graph", "meta", "version"],

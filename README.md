@@ -19,9 +19,13 @@ This repository contains:
 
 ## Status
 
-Scaffolding for the MVP. The controller starts, serves `/status`, and exposes
-`POST /api/apply` behind `DEPLOYER_TOKEN`; the apply pipeline itself
-(tar → git commit → image build → isolated run) lands next.
+The controller boots, serves `/status`, and exposes `POST /api/apply` behind
+`DEPLOYER_TOKEN` (still 501: the apply pipeline lands next).
+
+The Docker side is in place: `ServiceConfig` ↔ Swarm conversion, and the
+internal `service` primitives (`inspect`, `list`, `create`, `update`, `remove`)
+plus `wait.serviceConverged` behind a per-run-token Unix socket. Runs are not
+launched yet, so nothing mints tokens outside the tests.
 
 ## Development
 
@@ -43,8 +47,13 @@ DEPLOYER_TOKEN=dev pnpm dev
 | `DEPLOYER_TOKEN` | required | Bearer token for `POST /api/apply` |
 | `PORT` | `8787` | HTTP port |
 | `HOST` | `0.0.0.0` | HTTP bind address |
+| `DEPLOYER_SOCKET_PATH` | `.deployer/run/deployer.sock` | Internal Unix socket reached by deploy runs |
+| `DOCKER_SOCKET` | `/var/run/docker.sock` | Docker API socket |
 
-The controller refuses to start without `DEPLOYER_TOKEN`.
+The controller refuses to start without `DEPLOYER_TOKEN`. The socket path must
+be a host path mounted at the same location in the controller and in run
+containers, so a `--network none` run can reach it.
+
 
 ## Docker
 
@@ -106,7 +115,13 @@ const version = await executeQuery(q.Graph.meta.version());
 ```
 
 `executeQuery` reads `DEPLOYER_SOCKET` and `DEPLOYER_RUN_TOKEN` from the run
-environment; the controller uses the same `Graph` as its resolver contract.
+environment; the controller uses the same `Graph` as its resolver contract. A
+failed call rejects with the controller's message (`Unauthorized: ...`, or the
+argument validation error) instead of returning an error object.
+
+The controller parses `sdk/graph.ts` itself, so the schema file is the single
+wire contract for both sides. The build copies it to `dist/controller/graph.ts`
+for the deployed image.
 
 ## Design
 

@@ -8,7 +8,7 @@
 - [ ] Scaffold Node + pnpm; publish `@dldc/deployer-sdk` from `build/npm`; build the base runner image
 - [ ] Tar → git commit → image build
 - [ ] Isolated run container + Unix socket + per-run token
-- [ ] Internal `service` primitives + convergence wait
+- [x] Internal `service` primitives + convergence wait
 - [ ] Public apply API + CLI
 - [ ] `examples/hello` + acceptance script
 - [ ] Run the acceptance pass on a clean Swarm; record findings

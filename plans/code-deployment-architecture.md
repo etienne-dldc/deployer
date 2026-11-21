@@ -7,14 +7,14 @@
 
 ## Steps
 
-- [ ] Scaffold Node + pnpm
+- [x] Scaffold Node + pnpm
 - [ ] Publish `@dldc/deployer-sdk` from `build/npm`: `q` + `executeQuery` + `equal`; version check is a later helper
-- [ ] Internal Unix-socket endpoint (shared host volume) + per-run token
+- [x] Internal Unix-socket endpoint (shared host volume) + per-run token
 - [ ] MessagePack internal transport + `Uint8Array` builtin
 - [ ] Config/secret versioning (`put` / `rotate` / `stale`)
 - [ ] Container build + run pipeline (default Dockerfile, Dockerfile override, hardening, tagging)
 - [ ] Git commit flow (extract tar → deploy repo → commit)
-- [ ] `ServiceConfig` type + `toSwarm` / `fromSwarm`
+- [x] `ServiceConfig` type + `toSwarm` / `fromSwarm`
 - [ ] Low-level primitives (service / network / config / secret / data) + deploy-code reconcile
 - [ ] Repo mounted read-only at `/repo`, writable `/work` (`readRepoFile` is a later optional helper)
 - [ ] Managed data folders (`create` / `files.*` / `sync`) + bind mounts
