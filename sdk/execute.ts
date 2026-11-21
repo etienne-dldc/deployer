@@ -17,6 +17,12 @@ export interface ExecuteQueryOptions {
   socket?: string;
   /** Per-run token. Defaults to `DEPLOYER_RUN_TOKEN`. */
   token?: string;
+  /**
+   * Client-side deadline in milliseconds. Omitted means no client deadline:
+   * the controller bounds its own waits (`wait.serviceConverged` takes a
+   * timeout), so a fixed transport timeout must not cut a long wait short.
+   */
+  timeoutMs?: number;
 }
 
 /**
@@ -50,7 +56,11 @@ export async function executeQuery<T>(
   }
 
   const { path, args } = queryToObject(builtQuery);
-  const raw = await send(socketPath, `${JSON.stringify({ token, path, args })}\n`);
+  const raw = await send(
+    socketPath,
+    `${JSON.stringify({ token, path, args })}\n`,
+    options.timeoutMs,
+  );
 
   let response: unknown;
   try {
@@ -71,7 +81,7 @@ export async function executeQuery<T>(
   return response.result as T;
 }
 
-function send(socketPath: string, payload: string): Promise<string> {
+function send(socketPath: string, payload: string, timeoutMs: number | undefined): Promise<string> {
   return new Promise((resolve, reject) => {
     const socket = connectSocket(socketPath);
     let data = "";
@@ -85,7 +95,13 @@ function send(socketPath: string, payload: string): Promise<string> {
     };
 
     socket.setEncoding("utf8");
-    socket.setTimeout(30_000);
+
+    if (timeoutMs !== undefined && timeoutMs > 0) {
+      socket.setTimeout(timeoutMs);
+      socket.on("timeout", () => {
+        finish(() => reject(new Error(`deployer request timed out after ${String(timeoutMs)}ms`)));
+      });
+    }
 
     socket.on("connect", () => {
       socket.write(payload);
@@ -97,10 +113,6 @@ function send(socketPath: string, payload: string): Promise<string> {
       if (newline !== -1) {
         finish(() => resolve(data.slice(0, newline)));
       }
-    });
-
-    socket.on("timeout", () => {
-      finish(() => reject(new Error("deployer request timed out")));
     });
 
     socket.on("error", (error) => {

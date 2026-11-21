@@ -89,4 +89,34 @@ describe("executeQuery", () => {
       await rm(directory, { recursive: true, force: true });
     }
   });
+
+  it("only enforces a deadline when the caller sets one", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "deployer-sdk-"));
+    const socketPath = join(directory, "deployer.sock");
+
+    const server = createServer((socket) => {
+      socket.setEncoding("utf8");
+      socket.once("data", () => {
+        // Never answer: the client deadline has to fire.
+      });
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(socketPath, resolve);
+    });
+
+    try {
+      await expect(
+        executeQuery(q.Graph.meta.version(), {
+          socket: socketPath,
+          token: "run-token",
+          timeoutMs: 50,
+        }),
+      ).rejects.toThrow(/timed out after 50ms/);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
 });

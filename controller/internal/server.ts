@@ -78,6 +78,9 @@ async function ensureSocketIsFree(socketPath: string): Promise<void> {
 
 function handleConnection(socket: Socket, options: InternalServerOptions, maxRequestBytes: number) {
   socket.setEncoding("utf8");
+  // Only the wait for a request line is bounded here. Once dispatch starts, a
+  // resolver may legitimately block for a while (serviceConverged waits for
+  // tasks), so the transport must not cut it short.
   socket.setTimeout(30_000, () => socket.destroy());
 
   let buffer = "";
@@ -107,6 +110,7 @@ function handleConnection(socket: Socket, options: InternalServerOptions, maxReq
     if (newline === -1) return;
 
     handled = true;
+    socket.setTimeout(0);
     void dispatch(socket, buffer.slice(0, newline), options);
   });
 }
