@@ -1,6 +1,7 @@
 {
   "name": "@dldc/deployer-sdk",
   "version": "0.1.0",
+  "private": true,
   "description": "SDK for @dldc/deployer — the code-as-deployment engine for Docker Swarm",
   "keywords": [
     "deployer",
