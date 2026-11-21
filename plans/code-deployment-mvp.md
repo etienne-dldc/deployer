@@ -1,17 +1,47 @@
 # Deployer — MVP: One Repo, One Service
 
-> **Status: proposed.** The smallest end-to-end slice that proves the
-> code-as-deployment loop. Everything not needed to prove that loop is cut.
+> **Status: implemented and accepted** on a real single-node Swarm (see
+> [Acceptance run](#acceptance-run)). The smallest end-to-end slice that proves
+> the code-as-deployment loop. Everything not needed to prove that loop is cut.
 
 ## Steps
 
-- [ ] Scaffold Node + pnpm; publish `@dldc/deployer-sdk` from `build/npm`; build the base runner image
-- [ ] Tar → git commit → image build
-- [ ] Isolated run container + Unix socket + per-run token
+- [x] Scaffold Node + pnpm; stage `@dldc/deployer-sdk` in `build/npm`; build the base runner image (publishing to npm is still pending, so the base image carries the staged SDK)
+- [x] Tar → git commit → image build
+- [x] Isolated run container + Unix socket + per-run token
 - [x] Internal `service` primitives + convergence wait
-- [ ] Public apply API + CLI
-- [ ] `examples/hello` + acceptance script
-- [ ] Run the acceptance pass on a clean Swarm; record findings
+- [x] Public apply API + CLI
+- [x] `examples/hello` + acceptance script
+- [x] Run the acceptance pass on a clean Swarm; record findings
+
+## Acceptance run
+
+Run on 2026-11-21 against a single-node Swarm manager (`Ubuntu 22.04`,
+Docker 29.9.3, controller container on the host Docker socket, data dir
+`/root/deployer-data`). Everything below was observed on that machine, not just
+in unit tests.
+
+| Scenario | Observed |
+| --- | --- |
+| First deploy | `run ...: success`; service `hello 1/1`; `curl :8081` returns `Name: hello` |
+| Git history | one commit per deploy; a message given to the CLI becomes the commit subject (`second deploy: new greeting`) |
+| Unchanged re-deploy | new commit; log says "hello is up to date"; service version unchanged |
+| Changed spec | log says "updated hello"; `docker service inspect` shows the new env |
+| Public token | no token → `401`; empty body → `400`; 22 MB body → `413` |
+| Isolation | from inside the run: `uid=1000`, `CapEff: 0`, `NoNewPrivs: 1`, `Seccomp: 2`, rootfs `/app` → `EROFS`, `/repo` → `EROFS`, `/tmp` writable, no `/var/run/docker.sock`, outbound connect → `ENETUNREACH` |
+| Build source | image built from `git archive <commit>`; a failing run still leaves its commit in history |
+| Interrupted run | controller killed mid-run: the run container survived; after restart the log said `removed 1 orphan runs` and no `com.deployer.run` containers remained |
+| Test suite | `DEPLOYER_TEST_DOCKER=1 pnpm test`: 68/68 passed, including the live Swarm suite |
+
+Findings worth keeping:
+
+- Docker 29 still accepts the classic `/build` API that dockerode uses, so the
+  controller does not need the Docker CLI.
+- `inspect` + `equal` was enough for `hello` with no normalization code: the
+  env/labels/ports ordering was the only thing that needed care.
+- The first acceptance run failed on a packaging bug, not a design one: the
+  staged SDK's `dist/` was excluded by `.dockerignore`, so the deploy image had
+  the SDK's manifest without its code. Everything else ran on the first try.
 
 ## Hypothesis
 
@@ -256,17 +286,20 @@ Changing `WHOAMI_NAME` and re-deploying must update the service and change the
 
 ## Implementation notes
 
-- **Base image:** `node:26-slim` + pnpm; tag `deployer-runner-base:dev`. The SDK
-  is not baked in: the demo Dockerfile installs `@dldc/deployer-sdk` from npm as a
-  normal dependency, so the base image stays generic.
+- **Base image:** `node:26-slim` + pnpm; tag `deployer-runner-base:dev`. It
+  carries the staged SDK at `/opt/deployer-sdk` for the moment, because the
+  package is not published yet; deploy repos install it as
+  `file:/opt/deployer-sdk`. Once `@dldc/deployer-sdk` is on npm, drop the copy
+  and the base image stays generic.
 - **Public route:** `POST /api/apply[?message=<text>]` accepts the raw tar body
   (`application/x-tar`), checks the bearer token against
   `DEPLOYER_TOKEN`, and returns the run result. The controller refuses to
   start if the token is unset. It is the only public route; there is no public
   graph. Never pass this token to the run container.
-- **Root:** fixed `.deployer/` for the MVP, with no `DATA_DIR` env var yet:
-  `repo/` for git and `run/` for the socket and scratch space. No run log;
-  SQLite is the next step.
+- **Root:** `DEPLOYER_DATA_DIR` (default `.deployer/`): `repo/` for git and
+  `run/` for the socket and scratch space. The path must be mounted at the same
+  location in the controller and in run containers, because the controller hands
+  Swarm bind mounts to the Docker daemon. No run log; SQLite is the next step.
 - **Git:** one normal repo at `.deployer/repo`; replace the worktree,
   `git add -A`, `git commit --allow-empty`. The build context is
   `git archive <commit>`, so the image matches the commit exactly.
@@ -281,9 +314,13 @@ Changing `WHOAMI_NAME` and re-deploying must update the service and change the
 - **Logs:** stdout/stderr and `meta.log` are captured in memory and returned with
   the apply result. No JSONL and no SQLite; `git log` is the only persisted
   history for now.
-- **Tar:** the CLI sends the tar as the raw request body; the controller rejects
-  absolute paths and `..`, caps it at 20 MB, and the CLI excludes `.git` and
-  `node_modules`.
+- **Tar:** the CLI sends the tar as the raw request body and excludes `.git`,
+  `node_modules`, `.deployer`; the controller caps it at 20 MB. The controller
+  parses the tar itself: absolute paths, `..`, links, device nodes, duplicate
+  entries and truncated payloads are rejected, and the whole archive is validated
+  before anything is written, so a bad archive leaves the worktree untouched.
+  It accepts ustar prefixes, pax extended headers and GNU long names, which is
+  what `git archive` and `tar` emit.
 - **Failures:** a build failure, a non-zero run or a timeout marks the run failed
   and keeps the applied changes; re-running the commit is safe.
 
@@ -306,11 +343,15 @@ Changing `WHOAMI_NAME` and re-deploying must update the service and change the
 ## After the MVP
 
 1. SQLite run log/state, replacing the in-memory run result.
-2. Configs and secrets (env injection) on the same service.
-3. Managed data folders and mounts.
-4. Networks and two-service ordering (app + edge).
-5. MessagePack/binary and image digests.
-6. Controller in Swarm, bootstrap, self-hosting.
-7. Public read graph/UI, log streaming, rollback/restore/backups.
-8. Multiple deploy entrypoints within the one repo, if run granularity becomes a
-   problem.
+2. Publish `@dldc/deployer-sdk` and drop the `/opt/deployer-sdk` copy from the
+   runner base image.
+3. Image garbage collection: `deployer-run:<commit>` images accumulate one per
+   deploy.
+4. Configs and secrets (env injection) on the same service.
+5. Managed data folders and mounts.
+6. Networks and two-service ordering (app + edge).
+7. MessagePack/binary and image digests.
+8. Controller in Swarm, bootstrap, self-hosting.
+9. Public read graph/UI, log streaming, rollback/restore/backups.
+10. Multiple deploy entrypoints within the one repo, if run granularity becomes a
+    problem.
