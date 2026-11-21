@@ -11,11 +11,16 @@ export interface DeployImage {
  *
  * The tag carries the commit, so an image can always be traced back to the
  * history entry that produced it.
+ *
+ * `onOutput` receives the build output as it arrives (one call per line), so a
+ * failed build is debuggable from the run log instead of only reporting an exit
+ * code.
  */
 export async function buildDeployImage(
   docker: Docker,
   context: Buffer,
   commit: string,
+  onOutput?: (text: string) => void,
 ): Promise<DeployImage> {
   const tag = `deployer-run:${commit}`;
   const stream = (await docker.buildImage(Readable.from([context]), {
@@ -24,7 +29,7 @@ export async function buildDeployImage(
     forcerm: true,
   })) as AsyncIterable<Buffer> & NodeJS.ReadableStream;
 
-  return { tag, log: await consumeBuild(stream) };
+  return { tag, log: await consumeBuild(stream, onOutput) };
 }
 
 /**
@@ -32,9 +37,20 @@ export async function buildDeployImage(
  * with HTTP 200 when the build fails, so an `error` line is the only signal
  * that the image does not exist.
  */
-async function consumeBuild(stream: AsyncIterable<Buffer>): Promise<string> {
+export async function consumeBuild(
+  stream: AsyncIterable<Buffer>,
+  onOutput?: (text: string) => void,
+): Promise<string> {
   const lines: string[] = [];
   let pending = "";
+
+  const handle = (line: string): void => {
+    const text = decodeLine(line);
+    if (text === null || text === "") return;
+
+    lines.push(text);
+    onOutput?.(`${text}\n`);
+  };
 
   for await (const chunk of stream) {
     pending += chunk.toString("utf8");
@@ -43,23 +59,22 @@ async function consumeBuild(stream: AsyncIterable<Buffer>): Promise<string> {
     while (newline !== -1) {
       const line = pending.slice(0, newline).trim();
       pending = pending.slice(newline + 1);
-      if (line !== "") handleLine(line, lines);
+      if (line !== "") handle(line);
       newline = pending.indexOf("\n");
     }
   }
 
-  if (pending.trim() !== "") handleLine(pending.trim(), lines);
+  if (pending.trim() !== "") handle(pending.trim());
 
   return lines.join("\n");
 }
 
-function handleLine(line: string, lines: string[]): void {
+function decodeLine(line: string): string | null {
   let message: unknown;
   try {
     message = JSON.parse(line);
   } catch {
-    lines.push(line);
-    return;
+    return line;
   }
 
   const record = message as {
@@ -72,6 +87,8 @@ function handleLine(line: string, lines: string[]): void {
     throw new Error(`image build failed: ${record.error}`);
   }
   if (typeof record.stream === "string") {
-    lines.push(record.stream.trimEnd());
+    return record.stream.trimEnd();
   }
+
+  return null;
 }

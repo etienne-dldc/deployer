@@ -77,7 +77,7 @@ export function createApplyService(options: ApplyServiceOptions): ApplyService {
       log("info", `committed ${commit}`);
 
       const context = await options.repository.archive(commit);
-      const image = await buildDeployImage(options.docker, context, commit);
+      const image = await buildDeployImage(options.docker, context, commit, append);
       log("info", `built ${image.tag}`);
 
       const token = options.tokens.mint({ id: runId, commit, log });
