@@ -293,7 +293,9 @@ Changing `WHOAMI_NAME` and re-deploying must update the service and change the
   (`application/x-tar`), checks the bearer token against
   `DEPLOYER_TOKEN`, and returns the run result. The controller refuses to
   start if the token is unset. It is the only public route; there is no public
-  graph. Never pass this token to the run container.
+  graph. Never pass this token to the run container. Treat the route as
+  private: bind it to `127.0.0.1` and let CI stream the tar over SSH to a key
+  restricted to one apply command, as `deployer-sandbox` does.
 - **Root:** `DEPLOYER_DATA_DIR` (default `.deployer/`): `repo/` for git and
   `run/` for the socket and scratch space. The path must be mounted at the same
   location in the controller and in run containers, because the controller hands

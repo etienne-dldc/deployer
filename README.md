@@ -88,13 +88,19 @@ when it already matches.
 
 ```sh
 DEPLOYER_DATA_DIR=/root/deployer-data docker run --rm \
-  -p 8787:8787 \
+  -p 127.0.0.1:8787:8787 \
   -e DEPLOYER_TOKEN=change-me \
   -e DEPLOYER_DATA_DIR=/root/deployer-data \
   -v /root/deployer-data:/root/deployer-data \
   -v /var/run/docker.sock:/var/run/docker.sock \
   ghcr.io/etienne-dldc/deployer:dev
 ```
+
+In CI, do not publish the controller port: run `ssh user@host 'deploy <message>'`
+with the tar on stdin and a small remote script that posts it to
+`127.0.0.1:8787`. Restrict the key with
+`command="…/apply.mjs"` and `restrict` in `authorized_keys`, so it can only
+deploy. The controller's token never leaves the host that way.
 
 
 ## Docker
@@ -109,12 +115,17 @@ Run it:
 
 ```sh
 docker run --rm \
-  -p 8787:8787 \
+  -p 127.0.0.1:8787:8787 \
   -e DEPLOYER_TOKEN=change-me \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v "$PWD/.deployer:/app/.deployer" \
   ghcr.io/etienne-dldc/deployer:dev
 ```
+
+`/api/apply` builds images and controls Swarm, so it is not meant to be public:
+bind it to loopback and let CI reach it over SSH (see
+[deployer-sandbox](https://github.com/etienne-sandbox/deployer-sandbox), which
+streams the tar through an SSH key restricted to a single apply command).
 
 Images are published to
 `ghcr.io/etienne-dldc/deployer` by `.github/workflows/docker-publish.yml` on
