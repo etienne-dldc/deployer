@@ -15,6 +15,7 @@ interface FakeOptions {
   remove?: () => unknown;
   create?: () => unknown;
   tasks?: unknown[];
+  onUpdate?: (options: unknown) => void;
 }
 
 function fakeDocker(options: FakeOptions = {}): Docker {
@@ -24,7 +25,10 @@ function fakeDocker(options: FakeOptions = {}): Docker {
         if (options.inspect) return await options.inspect();
         return { Spec: {}, Version: { Index: 3 } };
       },
-      update: async () => (options.update ? await options.update() : {}),
+      update: async (updateOptions: unknown) => {
+        options.onUpdate?.(updateOptions);
+        return options.update ? await options.update() : {};
+      },
       remove: async () => (options.remove ? await options.remove() : {}),
     }),
     createService: async () => (options.create ? await options.create() : {}),
@@ -95,6 +99,28 @@ describe("createServiceManager", () => {
     await expect(manager.update("web", config, 2)).rejects.toBeInstanceOf(
       ServiceVersionConflictError,
     );
+  });
+
+  it("sends the service name in the update body", async () => {
+    let body: unknown;
+    const manager = createServiceManager(
+      fakeDocker({
+        inspect: () => ({
+          Spec: {
+            TaskTemplate: { ContainerSpec: { Image: "nginx" } },
+            Mode: { Replicated: { Replicas: 1 } },
+          },
+          Version: { Index: 8 },
+        }),
+        onUpdate: (options) => {
+          body = options;
+        },
+      }),
+    );
+
+    await manager.update("web", config, 7);
+
+    expect(body).toMatchObject({ Name: "web", version: 7 });
   });
 
   it("treats removing a missing service as success", async () => {

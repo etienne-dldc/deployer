@@ -79,7 +79,9 @@ export function createServiceManager(docker: Docker): ServiceManager {
     async update(name, config, version) {
       const spec = toSwarm(config);
       try {
-        await docker.getService(name).update({ ...spec, version });
+        // The update body is the full spec: Docker rejects a body without the
+        // service name ("renaming services is not supported").
+        await docker.getService(name).update({ Name: name, ...spec, version });
       } catch (error) {
         if (isVersionConflict(error)) {
           throw new ServiceVersionConflictError(name, version);
