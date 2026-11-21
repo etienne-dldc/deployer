@@ -25,6 +25,7 @@ const apply = createApplyService({
   tokens,
   socketPath: config.socketPath,
   runnerImage: config.runnerImage,
+  runTimeoutMs: config.runTimeoutMs,
 });
 
 const internal = await createInternalServer({

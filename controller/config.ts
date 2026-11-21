@@ -20,6 +20,8 @@ export interface Config {
    * artifact is mounted read-only, so no per-deploy image is built.
    */
   runnerImage: string;
+  /** Wall-clock cap for one deploy run. */
+  runTimeoutMs: number;
 }
 
 const DEFAULT_PORT = 8787;
@@ -27,6 +29,7 @@ const DEFAULT_HOST = "0.0.0.0";
 const DEFAULT_ROOT_DIR = ".deployer";
 const DEFAULT_DOCKER_SOCKET = "/var/run/docker.sock";
 const DEFAULT_RUNNER_IMAGE = "deployer-runner-base:dev";
+const DEFAULT_RUN_TIMEOUT_MS = 120_000;
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const publicToken = env.DEPLOYER_TOKEN;
@@ -44,7 +47,21 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     socketPath: absolutePath(env.DEPLOYER_SOCKET_PATH, join(rootDir, "run", "deployer.sock")),
     dockerSocket: env.DOCKER_SOCKET?.trim() || DEFAULT_DOCKER_SOCKET,
     runnerImage: env.DEPLOYER_RUNNER_IMAGE?.trim() || DEFAULT_RUNNER_IMAGE,
+    runTimeoutMs: parsePositive(env.DEPLOYER_RUN_TIMEOUT_MS, DEFAULT_RUN_TIMEOUT_MS),
   };
+}
+
+function parsePositive(raw: string | undefined, fallback: number): number {
+  if (raw === undefined || raw.trim() === "") {
+    return fallback;
+  }
+
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1) {
+    throw new Error(`Invalid DEPLOYER_RUN_TIMEOUT_MS=${JSON.stringify(raw)}`);
+  }
+
+  return value;
 }
 
 function absolutePath(raw: string | undefined, fallback: string): string {

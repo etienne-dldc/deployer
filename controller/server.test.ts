@@ -13,6 +13,7 @@ const config: Config = {
   socketPath: "/tmp/deployer-test/run/deployer.sock",
   dockerSocket: "/var/run/docker.sock",
   runnerImage: "deployer-runner-base:dev",
+  runTimeoutMs: 120_000,
 };
 
 const success: ApplyHandler = async () => ({

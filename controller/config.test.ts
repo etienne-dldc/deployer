@@ -16,6 +16,7 @@ describe("loadConfig", () => {
       socketPath: resolve(".deployer/run/deployer.sock"),
       dockerSocket: "/var/run/docker.sock",
       runnerImage: "deployer-runner-base:dev",
+      runTimeoutMs: 120_000,
     });
   });
 
@@ -44,5 +45,14 @@ describe("loadConfig", () => {
 
   it("rejects an invalid port", () => {
     expect(() => loadConfig({ DEPLOYER_TOKEN: "secret", PORT: "nope" })).toThrow("Invalid PORT");
+  });
+
+  it("reads the run timeout", () => {
+    expect(
+      loadConfig({ DEPLOYER_TOKEN: "secret", DEPLOYER_RUN_TIMEOUT_MS: "5000" }).runTimeoutMs,
+    ).toBe(5000);
+    expect(() => loadConfig({ DEPLOYER_TOKEN: "secret", DEPLOYER_RUN_TIMEOUT_MS: "0" })).toThrow(
+      "Invalid DEPLOYER_RUN_TIMEOUT_MS",
+    );
   });
 });

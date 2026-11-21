@@ -34,9 +34,16 @@ async function main(): Promise<void> {
     call: (path, args) => call(path, args),
   });
 
+  // A pending promise alone does not keep Node alive. Without this timer a
+  // deploy that awaits something that never settles lets the process exit 0
+  // and look successful; instead the controller's wall-clock timeout kills it
+  // and the run is reported as timed out.
+  const keepAlive = setInterval(() => undefined, 2 ** 30);
+
   try {
     await (deploy as (ctx: DeployContext) => Promise<void>)(harness.context);
   } finally {
+    clearInterval(keepAlive);
     await harness.flushLogs();
   }
 }

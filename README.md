@@ -95,6 +95,7 @@ DEPLOYER_TOKEN=dev pnpm dev
 | `DEPLOYER_SOCKET_PATH` | `<data dir>/run/deployer.sock` | Internal socket reached by runs |
 | `DOCKER_SOCKET` | `/var/run/docker.sock` | Docker API socket |
 | `DEPLOYER_RUNNER_IMAGE` | `deployer-runner-base:dev` | Image that runs deploy packages |
+| `DEPLOYER_RUN_TIMEOUT_MS` | `120000` | Wall-clock cap for one deploy run |
 
 `DEPLOYER_DATA_DIR` must be a host path mounted at the **same** location in the
 controller and in run containers: the controller hands Swarm bind mounts of
