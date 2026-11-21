@@ -1,0 +1,46 @@
+name: Publish CLI
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # No registry-url: npm >= 11.5.1 performs the OIDC exchange when
+      # NODE_AUTH_TOKEN is absent.
+      - uses: voidzero-dev/setup-vp@v1.21.2
+        with:
+          cache: false
+
+      - name: Ensure npm supports trusted publishing
+        run: npm install --global npm@^11.5.1
+
+      - run: vp install
+
+      - run: vp check
+
+      - run: vp test run
+
+      - name: Check tag matches package version
+        run: |
+          node -e '
+            const pkg = require("./package.json");
+            const tag = process.env.GITHUB_REF_NAME.replace(/^v/, "");
+            if (pkg.version !== tag) {
+              console.error(`Tag v${tag} does not match package version ${pkg.version}`);
+              process.exit(1);
+            }
+          '
+
+      - run: pnpm pack:cli
+
+      - run: npm publish --access public
+        working-directory: build/cli

@@ -5,7 +5,13 @@ const ssh2Stub = fileURLToPath(new URL("./controller/docker/ssh2-stub.ts", impor
 
 export default defineConfig({
   test: {
-    include: ["sdk/**/*.test.ts", "controller/**/*.test.ts", "scripts/**/*.test.ts"],
+    include: [
+      "artifact/**/*.test.ts",
+      "cli/**/*.test.ts",
+      "sdk/**/*.test.ts",
+      "controller/**/*.test.ts",
+      "scripts/**/*.test.ts",
+    ],
     environment: "node",
   },
 
@@ -67,6 +73,40 @@ export default defineConfig({
         // docker-modem imports ssh2 (and its native binding) eagerly; the
         // controller only supports a local Unix socket.
         ssh2: ssh2Stub,
+      },
+    },
+    {
+      name: "harness",
+      entry: {
+        main: "controller/harness.ts",
+      },
+      outDir: "dist/harness",
+      format: ["esm"],
+      dts: false,
+      sourcemap: true,
+      clean: true,
+      deps: {
+        // Runs inside the runner image: node builtins only.
+        alwaysBundle: [],
+        onlyBundle: false,
+        onlyImport: [],
+      },
+    },
+    {
+      name: "cli",
+      entry: {
+        main: "cli/main.ts",
+      },
+      outDir: "dist/cli",
+      format: ["esm"],
+      dts: false,
+      sourcemap: true,
+      clean: true,
+      deps: {
+        // The published CLI must not depend on anything but node builtins.
+        alwaysBundle: [],
+        onlyBundle: false,
+        onlyImport: [],
       },
     },
   ],

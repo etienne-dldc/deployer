@@ -4,7 +4,7 @@ import type { Server } from "node:http";
 import { isAuthorized } from "./auth.ts";
 import type { Config } from "./config.ts";
 import type { ApplyRequest, ApplyResult } from "./pipeline/apply.ts";
-import { InvalidArchiveError } from "./pipeline/tar.ts";
+import { InvalidPackageError } from "../artifact/errors.ts";
 
 /** Deploy archives are small; anything bigger is rejected before parsing. */
 export const MAX_APPLY_BYTES = 20 * 1024 * 1024;
@@ -43,7 +43,7 @@ export function createApp(config: Config, apply: ApplyHandler): Hono {
       const result = await apply({ tar: body, message: context.req.query("message") });
       return context.json(result);
     } catch (error) {
-      if (error instanceof InvalidArchiveError) {
+      if (error instanceof InvalidPackageError) {
         return context.json({ error: error.message }, 400);
       }
       throw error;

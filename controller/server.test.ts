@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { Config } from "./config.ts";
 import type { ApplyHandler } from "./server.ts";
 import { MAX_APPLY_BYTES, createServer } from "./server.ts";
-import { InvalidArchiveError } from "./pipeline/tar.ts";
+import { InvalidPackageError } from "../artifact/errors.ts";
 
 const config: Config = {
   port: 0,
@@ -12,6 +12,7 @@ const config: Config = {
   rootDir: "/tmp/deployer-test",
   socketPath: "/tmp/deployer-test/run/deployer.sock",
   dockerSocket: "/var/run/docker.sock",
+  runnerImage: "deployer-runner-base:dev",
 };
 
 const success: ApplyHandler = async () => ({
@@ -88,7 +89,7 @@ describe("controller server", () => {
 
   it("maps an invalid archive to 400", async () => {
     const baseUrl = await startServer(async () => {
-      throw new InvalidArchiveError("archive entry escapes the repository: ../x");
+      throw new InvalidPackageError("archive entry escapes the package: ../x");
     });
 
     const response = await fetch(`${baseUrl}/api/apply`, {

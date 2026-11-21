@@ -2,7 +2,7 @@ import { chmod, mkdir, rm } from "node:fs/promises";
 import { createServer, createConnection, type Server, type Socket } from "node:net";
 import { dirname } from "node:path";
 import type { TEngine } from "@dldc/ts-api/server";
-import type { InternalError, InternalResponse } from "../../sdk/protocol.ts";
+import type { InternalError, InternalResponse } from "./protocol.ts";
 import { RunKey } from "./run-context.ts";
 import type { RunTokenStore } from "./tokens.ts";
 

@@ -3,7 +3,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { executeQuery, q } from "./execute.ts";
+import { executeQuery, q } from "./client.ts";
 
 interface Request {
   token: string;

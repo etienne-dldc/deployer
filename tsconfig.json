@@ -16,6 +16,7 @@
     "isolatedModules": true
   },
   "include": [
+    "artifact/**/*.ts",
     "sdk/**/*.ts",
     "controller/**/*.ts",
     "cli/**/*.ts",

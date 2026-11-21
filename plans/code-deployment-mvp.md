@@ -1,5 +1,10 @@
 # Deployer — MVP: One Repo, One Service
 
+> **Superseded by [`code-as-package.md`](./code-as-package.md) in `0.2.0`.** The
+> source-tarball + per-commit image pipeline described here is gone; the artifact
+> is now an npm package and the runner image is fixed. The acceptance run and the
+> isolation model still apply.
+>
 > **Status: implemented and accepted** on a real single-node Swarm (see
 > [Acceptance run](#acceptance-run)). The smallest end-to-end slice that proves
 > the code-as-deployment loop. Everything not needed to prove that loop is cut.

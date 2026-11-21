@@ -2,14 +2,14 @@ import type Docker from "dockerode";
 import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { describePackage, extractDeployPackage, readDeployPackage } from "../../artifact/index.ts";
 import type { LogLevel } from "../../sdk/graph.ts";
 import type { RunTokenStore } from "../internal/tokens.ts";
-import { buildDeployImage } from "./image.ts";
 import { DeployRepository } from "./repo.ts";
 import { DEFAULT_RUN_TIMEOUT_MS, runDeployContainer } from "./run.ts";
-import { extractRepositoryTar } from "./tar.ts";
 
 export interface ApplyRequest {
+  /** Gzipped npm package tarball. */
   tar: Uint8Array;
   message?: string;
 }
@@ -33,18 +33,25 @@ export interface ApplyServiceOptions {
   repository: DeployRepository;
   tokens: RunTokenStore;
   socketPath: string;
+  /** Image that runs deploy packages. */
+  runnerImage: string;
   runTimeoutMs?: number;
 }
 
 /**
- * The apply pipeline: received tar -> git commit -> image build -> isolated run.
+ * The apply pipeline: package -> validate -> git commit -> isolated run.
+ *
+ * The package is validated before anything is committed, so an invalid
+ * artifact is a 400 and never enters the history. Dependencies are resolved in
+ * CI: the runner mounts the unpacked package and imports its entry, it never
+ * installs anything.
  *
  * Runs are serialized: the deploy repository and the socket are single-tenant,
  * and two overlapping applies would race on the same history.
  *
  * A failure keeps the commit and any changes the run already applied; the run
- * log is the record, and re-running the same tar is safe because deploy code
- * reconciles against live state.
+ * log is the record, and re-running the same package is safe because deploy
+ * code reconciles against live state.
  */
 export function createApplyService(options: ApplyServiceOptions): ApplyService {
   const queue = new SerialQueue();
@@ -57,6 +64,9 @@ export function createApplyService(options: ApplyServiceOptions): ApplyService {
   };
 
   async function applyOnce(request: ApplyRequest): Promise<ApplyResult> {
+    // InvalidPackageError propagates to the HTTP layer as a 400.
+    const pkg = readDeployPackage(request.tar);
+
     const runId = randomUUID();
     const logs: string[] = [];
     const append = (text: string) => logs.push(text);
@@ -65,28 +75,28 @@ export function createApplyService(options: ApplyServiceOptions): ApplyService {
     };
 
     const workDir = join(workRoot, runId);
+    const packageDir = join(workDir, "deploy");
     let commit: string | null = null;
 
     try {
       log("info", `apply started (${runId})`);
+      log("info", `package ${describePackage(pkg)}`);
 
       commit = await options.repository.commitWorktree(
-        (directory) => extractRepositoryTar(request.tar, directory),
-        commitMessage(request.message, runId),
+        (directory) => extractDeployPackage(pkg, directory),
+        commitMessage(request.message, pkg.manifest, runId),
       );
       log("info", `committed ${commit}`);
 
-      const context = await options.repository.archive(commit);
-      const image = await buildDeployImage(options.docker, context, commit, append);
-      log("info", `built ${image.tag}`);
+      await extractDeployPackage(pkg, packageDir);
 
       const token = options.tokens.mint({ id: runId, commit, log });
       try {
         const result = await runDeployContainer(options.docker, {
-          image: image.tag,
+          image: options.runnerImage,
           runId,
           token,
-          repoDir: options.repository.directory,
+          packageDir,
           workDir,
           socketDir: dirname(options.socketPath),
           timeoutMs: options.runTimeoutMs ?? DEFAULT_RUN_TIMEOUT_MS,
@@ -116,13 +126,17 @@ export function createApplyService(options: ApplyServiceOptions): ApplyService {
   }
 }
 
-function commitMessage(raw: string | undefined, runId: string): string {
+function commitMessage(
+  raw: string | undefined,
+  manifest: { name: string; version: string },
+  runId: string,
+): string {
   const text = raw
     ?.replace(/[\r\n\t]+/g, " ")
     .trim()
     .slice(0, 200);
   return text === undefined || text === ""
-    ? `deploy ${new Date().toISOString()} (${runId.slice(0, 8)})`
+    ? `${manifest.name}@${manifest.version} (${runId.slice(0, 8)})`
     : text;
 }
 

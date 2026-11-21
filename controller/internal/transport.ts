@@ -1,18 +1,7 @@
 import { connect as connectSocket } from "node:net";
-import { query, queryToObject, type TQuery } from "@dldc/ts-api/client";
-import type { Graph } from "./graph.ts";
 import { isInternalResponse } from "./protocol.ts";
 
-/**
- * The typed ts-api query builder for the deployer Graph.
- *
- * Use it to build a query, then hand that query to `executeQuery`:
- *
- *   const version = await executeQuery(q.Graph.meta.version());
- */
-export const q = query<{ Graph: Graph }>();
-
-export interface ExecuteQueryOptions {
+export interface CallOptions {
   /** Unix socket path. Defaults to `DEPLOYER_SOCKET`. */
   socket?: string;
   /** Per-run token. Defaults to `DEPLOYER_RUN_TOKEN`. */
@@ -26,10 +15,7 @@ export interface ExecuteQueryOptions {
 }
 
 /**
- * Execute a ts-api query against the controller's internal Unix socket.
- *
- * The SDK extracts ts-api's `{ path, args }` and posts them over
- * newline-delimited JSON:
+ * Send one request to the controller's internal Unix socket.
  *
  *   request:  { token, path: ["Graph", "service", "inspect"], args: ["hello"] }
  *   response: { ok: true, result } | { ok: false, error: { kind, message } }
@@ -41,9 +27,10 @@ export interface ExecuteQueryOptions {
  * makes a failed request easy to isolate; the controller can keep serving other
  * runs in the meantime.
  */
-export async function executeQuery<T>(
-  builtQuery: TQuery<T>,
-  options: ExecuteQueryOptions = {},
+export async function call<T>(
+  path: string[],
+  args: unknown[],
+  options: CallOptions = {},
 ): Promise<T> {
   const socketPath = options.socket ?? process.env.DEPLOYER_SOCKET;
   const token = options.token ?? process.env.DEPLOYER_RUN_TOKEN;
@@ -55,7 +42,6 @@ export async function executeQuery<T>(
     throw new Error("Missing run token: pass `token` or set DEPLOYER_RUN_TOKEN");
   }
 
-  const { path, args } = queryToObject(builtQuery);
   const raw = await send(
     socketPath,
     `${JSON.stringify({ token, path, args })}\n`,

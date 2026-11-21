@@ -33,6 +33,14 @@ await rm(publishDir, { recursive: true, force: true });
 await mkdir(publishDir, { recursive: true });
 await cp(sdkDistDir, join(publishDir, "dist"), { recursive: true });
 
+// The SDK is types-only, so the packer may not emit a runtime entry at all.
+// Keep one so `exports.default` resolves for tooling; it exports nothing.
+try {
+  await stat(join(publishDir, "dist/index.mjs"));
+} catch {
+  await writeFile(join(publishDir, "dist/index.mjs"), "export {};\n");
+}
+
 for (const file of ["README.md", "LICENSE", "LICENSE.md"]) {
   try {
     await stat(join(rootDir, file));

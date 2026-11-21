@@ -1,5 +1,14 @@
 {
   "name": "hello-deploy",
+  "version": "0.0.0",
   "private": true,
-  "type": "module"
+  "description": "Example deploy package for @dldc/deployer",
+  "files": [
+    "index.js"
+  ],
+  "type": "module",
+  "main": "index.js",
+  "deployer": {
+    "api": 1
+  }
 }

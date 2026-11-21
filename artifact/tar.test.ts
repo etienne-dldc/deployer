@@ -1,8 +1,9 @@
-import { mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { InvalidArchiveError, extractRepositoryTar, parseRepositoryTar } from "./tar.ts";
+import { InvalidPackageError } from "./errors.ts";
+import { extractEntries, parseTar } from "./tar.ts";
 
 let directory: string;
 
@@ -14,23 +15,19 @@ afterEach(async () => {
   await rm(directory, { recursive: true, force: true });
 });
 
-async function destination(): Promise<string> {
-  const path = join(directory, "repo");
-  await mkdir(path, { recursive: true });
-  return path;
-}
-
-describe("extractRepositoryTar", () => {
-  it("extracts a repository into a directory", async () => {
+describe("extractEntries", () => {
+  it("extracts entries into a directory", async () => {
     const target = await destination();
 
-    await extractRepositoryTar(
-      makeTar([
-        { name: "./", type: "5" },
-        { name: "./index.js", content: "export {};\n" },
-        { name: "./src/", type: "5" },
-        { name: "./src/a.js", content: "a\n" },
-      ]),
+    await extractEntries(
+      parseTar(
+        makeTar([
+          { name: "./", type: "5" },
+          { name: "./index.js", content: "export {};\n" },
+          { name: "./src/", type: "5" },
+          { name: "./src/a.js", content: "a\n" },
+        ]),
+      ),
       target,
     );
 
@@ -38,114 +35,105 @@ describe("extractRepositoryTar", () => {
     expect((await readdir(target)).sort()).toEqual(["index.js", "src"]);
   });
 
-  it("extracts the long paths a pax header carries", async () => {
-    const target = await destination();
-    const longPath = `${"a/".repeat(80)}file.js`;
-
-    await extractRepositoryTar(extractPaxTar(longPath, "long\n"), target);
-
-    await expect(readFile(join(target, longPath), "utf8")).resolves.toBe("long\n");
-  });
-
-  it("rejects entries that escape the repository", async () => {
+  it("makes files readable by the run user and preserves the exec bit", async () => {
     const target = await destination();
 
-    await expect(
-      extractRepositoryTar(makeTar([{ name: "../evil.txt", content: "x" }]), target),
-    ).rejects.toThrow(/escapes the repository/);
-    await expect(
-      extractRepositoryTar(makeTar([{ name: "/etc/evil", content: "x" }]), target),
-    ).rejects.toThrow(/escapes the repository/);
-    await expect(
-      extractRepositoryTar(makeTar([{ name: "src/../../evil", content: "x" }]), target),
-    ).rejects.toThrow(/escapes the repository/);
+    await extractEntries(
+      parseTar(
+        makeTar([
+          { name: "secret.js", content: "x", mode: 0o600 },
+          { name: "run.sh", content: "#!/bin/sh\n", mode: 0o755 },
+        ]),
+      ),
+      target,
+    );
+
+    expect((await stat(join(target, "secret.js"))).mode & 0o777).toBe(0o644);
+    expect((await stat(join(target, "run.sh"))).mode & 0o777).toBe(0o755);
   });
 
   it("writes nothing when a later entry is unsafe", async () => {
     const target = await destination();
 
-    await expect(
-      extractRepositoryTar(
+    expect(() =>
+      parseTar(
         makeTar([
           { name: "safe.txt", content: "ok" },
           { name: "../evil.txt", content: "x" },
         ]),
-        target,
       ),
-    ).rejects.toBeInstanceOf(InvalidArchiveError);
+    ).toThrow(InvalidPackageError);
 
-    await expect(readdir(target)).resolves.toEqual([]);
-  });
-
-  it("rejects links and other non-file entries", async () => {
-    const target = await destination();
-
-    await expect(
-      extractRepositoryTar(makeTar([{ name: "link", content: "/etc/passwd", type: "2" }]), target),
-    ).rejects.toThrow(/unsupported archive entry type/);
-    await expect(
-      extractRepositoryTar(makeTar([{ name: "hard", content: "index.js", type: "1" }]), target),
-    ).rejects.toThrow(/unsupported archive entry type/);
-    await expect(
-      extractRepositoryTar(makeTar([{ name: "dev", content: "", type: "3" }]), target),
-    ).rejects.toThrow(/unsupported archive entry type/);
-  });
-
-  it("rejects malformed input", async () => {
-    const target = await destination();
-
-    await expect(extractRepositoryTar(Buffer.from("not a tar"), target)).rejects.toThrow(
-      /not a valid tar/,
-    );
-    await expect(extractRepositoryTar(Buffer.alloc(0), target)).rejects.toThrow(/empty/);
-  });
-
-  it("rejects a corrupted header", async () => {
-    const target = await destination();
-    const archive = makeTar([{ name: "a.txt", content: "a" }]);
-    archive.write("b.txt", 0, "utf8");
-
-    await expect(extractRepositoryTar(archive, target)).rejects.toThrow(/corrupted/);
-  });
-
-  it("rejects a truncated entry", async () => {
-    const target = await destination();
-    const archive = makeTar([{ name: "a.txt", content: "0123456789" }]);
-
-    await expect(extractRepositoryTar(archive.subarray(0, 512 + 5), target)).rejects.toThrow(
-      /truncated/,
-    );
-  });
-
-  it("accepts an empty archive", async () => {
-    const target = await destination();
-
-    await expect(extractRepositoryTar(Buffer.alloc(1024), target)).resolves.toBeUndefined();
     await expect(readdir(target)).resolves.toEqual([]);
   });
 });
 
-describe("parseRepositoryTar", () => {
-  it("normalizes paths and reports modes", async () => {
-    const entries = parseRepositoryTar(
-      makeTar([{ name: "./src//a.js", content: "a", mode: 0o600 }]),
-    );
+describe("parseTar", () => {
+  it("normalizes paths and reports modes", () => {
+    const entries = parseTar(makeTar([{ name: "./src//a.js", content: "a", mode: 0o600 }]));
 
     expect(entries).toHaveLength(1);
     expect(entries[0]).toMatchObject({ type: "file", path: "src/a.js", mode: 0o600 });
   });
 
-  it("uses the ustar prefix field", async () => {
-    const entries = parseRepositoryTar(
-      makeTar([{ name: "a.js", prefix: "deep/dir", content: "a" }]),
-    );
+  it("uses the ustar prefix field", () => {
+    const entries = parseTar(makeTar([{ name: "a.js", prefix: "deep/dir", content: "a" }]));
 
     expect(entries[0]?.path).toBe("deep/dir/a.js");
   });
 
-  it("rejects duplicate entries", async () => {
+  it("reads the long paths a pax header carries", () => {
+    const longPath = `${"a/".repeat(80)}file.js`;
+    const entries = parseTar(makePaxTar(longPath, "long\n"));
+
+    expect(entries[0]).toMatchObject({ type: "file", path: longPath });
+  });
+
+  it("rejects entries that escape the package", () => {
+    expect(() => parseTar(makeTar([{ name: "../evil.txt", content: "x" }]))).toThrow(
+      /escapes the package/,
+    );
+    expect(() => parseTar(makeTar([{ name: "/etc/evil", content: "x" }]))).toThrow(
+      /escapes the package/,
+    );
+    expect(() => parseTar(makeTar([{ name: "src/../../evil", content: "x" }]))).toThrow(
+      /escapes the package/,
+    );
+  });
+
+  it("rejects links and other non-file entries", () => {
+    expect(() => parseTar(makeTar([{ name: "link", content: "/etc/passwd", type: "2" }]))).toThrow(
+      /unsupported archive entry type/,
+    );
+    expect(() => parseTar(makeTar([{ name: "hard", content: "index.js", type: "1" }]))).toThrow(
+      /unsupported archive entry type/,
+    );
+    expect(() => parseTar(makeTar([{ name: "dev", content: "", type: "3" }]))).toThrow(
+      /unsupported archive entry type/,
+    );
+  });
+
+  it("rejects malformed input", () => {
+    expect(() => parseTar(Buffer.from("not a tar"))).toThrow(/not a valid tar/);
+    expect(() => parseTar(Buffer.alloc(0))).toThrow(/empty/);
+  });
+
+  it("rejects a corrupted header", () => {
+    const archive = makeTar([{ name: "a.txt", content: "a" }]);
+    archive.write("b.txt", 0, "utf8");
+
+    expect(() => parseTar(archive)).toThrow(/corrupted/);
+  });
+
+  it("rejects a truncated entry", () => {
+    const archive = makeTar([{ name: "a.txt", content: "0123456789" }]);
+
+    expect(() => parseTar(archive.subarray(0, 512 + 5))).toThrow(/truncated/);
+  });
+
+  it("rejects duplicate entries", () => {
     expect(() =>
-      parseRepositoryTar(
+      parseTar(
         makeTar([
           { name: "a.txt", content: "1" },
           { name: "./a.txt", content: "2" },
@@ -153,7 +141,30 @@ describe("parseRepositoryTar", () => {
       ),
     ).toThrow(/duplicate/);
   });
+
+  it("rejects an archive past the entry cap", () => {
+    const archive = makeTar([
+      { name: "a.txt", content: "1" },
+      { name: "b.txt", content: "2" },
+    ]);
+
+    expect(() => parseTar(archive, { maxEntries: 1 })).toThrow(/more than 1 entries/);
+  });
+
+  it("accepts an empty archive", async () => {
+    const target = await destination();
+
+    expect(parseTar(Buffer.alloc(1024))).toEqual([]);
+    await expect(extractEntries([], target)).resolves.toBeUndefined();
+    await expect(readdir(target)).resolves.toEqual([]);
+  });
 });
+
+async function destination(): Promise<string> {
+  const path = join(directory, "package");
+  await mkdir(path, { recursive: true });
+  return path;
+}
 
 interface RawEntry {
   name: string;
@@ -197,7 +208,7 @@ function makeTar(entries: RawEntry[]): Buffer {
 }
 
 /** A pax extended header followed by the entry it describes. */
-function extractPaxTar(path: string, content: string): Buffer {
+function makePaxTar(path: string, content: string): Buffer {
   const record = `path=${path}\n`;
   const body = `${paxRecordLength(record)} ${record}`;
 

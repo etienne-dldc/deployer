@@ -1,10 +1,12 @@
-# Base image for deploy code. Repos use this as `FROM deployer-runner-base:dev`
-# and install their own dependencies, including `@dldc/deployer-sdk`.
+# Runner image for deploy packages.
+#
+# It carries Node and the harness only: the package is mounted read-only at
+# /deploy, and nothing is installed at deploy time. Rebuild it with
+# `pnpm base:build` whenever the harness changes.
 FROM node:26-slim
 
-RUN npm install -g pnpm@12.14.0 \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+COPY dist/harness /opt/deployer
 
-WORKDIR /app
+# The run container starts with User 1000:1000 and WorkingDir /deploy; the
+# controller passes both, so nothing is declared here.
+CMD ["node", "--enable-source-maps", "/opt/deployer/harness.mjs"]

@@ -2,8 +2,8 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { extractEntries, parseTar } from "../../artifact/tar.ts";
 import { DeployRepository } from "./repo.ts";
-import { extractRepositoryTar } from "./tar.ts";
 
 let directory: string;
 let repository: DeployRepository;
@@ -20,7 +20,7 @@ afterEach(async () => {
 async function readCommit(commit: string): Promise<Record<string, string>> {
   const destination = join(directory, `archive-${commit.slice(0, 7)}`);
   await mkdir(destination, { recursive: true });
-  await extractRepositoryTar(await repository.archive(commit), destination);
+  await extractEntries(parseTar(await repository.archive(commit)), destination);
 
   const files: Record<string, string> = {};
   for (const name of await readdir(destination)) {

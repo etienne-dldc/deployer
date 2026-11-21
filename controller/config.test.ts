@@ -15,6 +15,7 @@ describe("loadConfig", () => {
       rootDir: resolve(".deployer"),
       socketPath: resolve(".deployer/run/deployer.sock"),
       dockerSocket: "/var/run/docker.sock",
+      runnerImage: "deployer-runner-base:dev",
     });
   });
 

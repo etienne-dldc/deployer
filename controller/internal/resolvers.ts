@@ -1,6 +1,6 @@
 import { fn, type TGraphOf, type TResolver } from "@dldc/ts-api/server";
 import type { Graph } from "../../sdk/graph.ts";
-import { PROTOCOL_VERSION } from "../../sdk/protocol.ts";
+import { PROTOCOL_VERSION } from "./protocol.ts";
 import type { ServiceManager } from "../docker/services.ts";
 import { RunKey } from "./run-context.ts";
 

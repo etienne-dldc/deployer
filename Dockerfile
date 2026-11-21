@@ -15,6 +15,7 @@ RUN pnpm install --frozen-lockfile
 COPY tsconfig.json vite.config.ts ./
 COPY controller ./controller
 COPY sdk ./sdk
+COPY artifact ./artifact
 RUN pnpm build:controller
 
 FROM node:26-slim AS runtime

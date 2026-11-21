@@ -2,37 +2,74 @@
 
 Headless code-as-deployment engine for Docker Swarm.
 
-The deployable unit is not a desired-state document. It is the code in **one
-deploy repository per environment**, executed against the live system through a
-small controller API. Every deploy is a git commit; `git log` is the history and
-the debugging UI.
+The deployable unit is not a desired-state document. It is an **npm package
+whose default export is a deploy function**, executed once against the live
+system inside a hardened container. Every deploy is a git commit in the
+controller's history, and the package that ran is the package in that commit.
 
 This repository contains:
 
 | Path | What |
 | --- | --- |
-| `controller` | The Hono controller server; it owns the Docker/Swarm side. Private, shipped as a Docker image. |
-| `sdk` | The SDK used by deploy code. Its build is the only npm artifact. |
-| `cli` | `deploy <dir>`: packs a deploy repo and posts it to the controller. |
-| `examples/hello` | A working deploy repo: reconciles one whoami service on `:8081`. |
-| `scripts/stage-sdk.ts` | Creates `build/npm`, the SDK-only publish folder, with a generated `package.json`. |
-| `docker/runner-base` | Base image for deploy-code containers. |
-| `plans/` | Architecture and MVP design notes. |
+| `controller` | Hono controller: the HTTP apply endpoint, the deploy history, and the Docker/Swarm side. |
+| `artifact` | Package format: gzip/tar parsing, contract validation, extraction. Shared by the controller and the CLI. |
+| `harness` | In `controller/`: the tiny runner entry that imports a package and calls its default export with a `DeployContext`. |
+| `sdk` | **Types only.** `DeployContext`, `ServiceConfig` and friends. |
+| `cli` | `@dldc/deployer-cli`: validates a `.tgz` and streams it over SSH. |
+| `examples/hello` | A working deploy package: reconciles one whoami service on `:8081`. |
+| `docker/runner-base` | The image that runs deploy packages (Node + harness only). |
+| `plans/` | Architecture and design notes. |
 
-## Status
+## The package
 
-The apply pipeline is complete: `POST /api/apply` takes a tar of the deploy
-repository, commits it to the deploy git history, builds an image from
-`git archive <commit>`, and runs that image once in a hardened ephemeral
-container. The run talks back through the internal Unix socket with a per-run
-token, and the response carries the run id, the commit and the run log.
+A deploy repository builds and packs itself; the deployer never installs or
+compiles anything. The artifact is the output of `npm pack`:
 
-The Docker side was already in place: `ServiceConfig` ↔ Swarm conversion, the
-internal `service` primitives (`inspect`, `list`, `create`, `update`, `remove`)
-plus `wait.serviceConverged` behind a per-run-token Unix socket.
+```
+package/package.json
+package/dist/deploy.js      ← entry, ESM, default export
+package/assets/…            ← optional files the deploy code reads
+```
 
-One thing is deliberately not done yet: the controller keeps exactly one deploy
-repository and one socket, so applies are serialized.
+```json
+{
+  "name": "hello-deploy",
+  "version": "0.0.0",
+  "type": "module",
+  "main": "dist/deploy.js",
+  "files": ["dist"],
+  "deployer": { "api": 1 }
+}
+```
+
+```ts
+import type { DeployContext } from "@dldc/deployer-sdk";
+
+export default async function deploy({ service, wait, log, equal, run }: DeployContext) {
+  log.info(`deploying from ${run.commit.slice(0, 12)}`);
+
+  const live = await service.inspect("hello");
+  if (live === null) await service.create("hello", config);
+  else if (!equal(live.config, config)) await service.update("hello", config, live.version);
+
+  await wait.serviceConverged("hello");
+}
+```
+
+`DeployContext` is the artifact's whole runtime: service calls, waits, logs,
+`equal`, the run identity, `packageDir`, and asset access (`readAsset`,
+`readTextAsset`, `listAssets`, resolved against the package root so bundling
+never moves them).
+
+Rules enforced by both the CLI and the controller:
+
+- gzipped npm tarball, entries under `package/`;
+- `type: "module"`, entry inside the package, `deployer.api: 1`;
+- no `dependencies` unless `node_modules/` is shipped (`bundledDependencies`,
+  the escape hatch for native modules);
+- otherwise no unresolved bare specifiers — bundle, or import packages with
+  `import type`;
+- limits: 20 MiB compressed, 64 MiB decompressed, 20 000 entries.
 
 ## Development
 
@@ -40,7 +77,7 @@ repository and one socket, so applies are serialized.
 pnpm install
 pnpm check        # format, lint, type-check
 pnpm test
-pnpm build        # controller + SDK + build/npm publish staging
+pnpm build        # controller + harness + sdk + cli, staged in build/npm and build/cli
 ```
 
 Run the controller locally:
@@ -54,37 +91,56 @@ DEPLOYER_TOKEN=dev pnpm dev
 | `DEPLOYER_TOKEN` | required | Bearer token for `POST /api/apply` |
 | `PORT` | `8787` | HTTP port |
 | `HOST` | `0.0.0.0` | HTTP bind address |
-| `DEPLOYER_DATA_DIR` | `.deployer` | Controller root: `repo/` (deploy history) and `run/` (socket, scratch) |
-| `DEPLOYER_SOCKET_PATH` | `<data dir>/run/deployer.sock` | Internal Unix socket reached by deploy runs |
+| `DEPLOYER_DATA_DIR` | `.deployer` | Controller root: `repo/` (history) and `run/` (socket, scratch) |
+| `DEPLOYER_SOCKET_PATH` | `<data dir>/run/deployer.sock` | Internal socket reached by runs |
 | `DOCKER_SOCKET` | `/var/run/docker.sock` | Docker API socket |
+| `DEPLOYER_RUNNER_IMAGE` | `deployer-runner-base:dev` | Image that runs deploy packages |
 
-The controller refuses to start without `DEPLOYER_TOKEN`. `DEPLOYER_DATA_DIR`
-must be a host path mounted at the **same** location in the controller and in
-run containers: the controller hands Swarm bind mounts of `repo/` and `run/`,
-and those paths are resolved by the Docker daemon on the host.
+`DEPLOYER_DATA_DIR` must be a host path mounted at the **same** location in the
+controller and in run containers: the controller hands Swarm bind mounts of
+those paths, and the daemon resolves them on the host.
 
 ## Deploying
 
-A deploy repo is a directory with a `Dockerfile` and deploy code:
-
 ```sh
-DEPLOYER_URL=http://127.0.0.1:8787 DEPLOYER_TOKEN=dev pnpm deploy examples/hello
+# in the deploy repository
+pnpm build
+npm pack --pack-destination artifacts
+
+npx @dldc/deployer-cli deploy artifacts/*.tgz
 ```
 
-The CLI packs the directory (skipping `.git`, `node_modules`, `.deployer`),
-posts it to `/api/apply`, and prints the run log. The controller then:
+The CLI validates the package locally (same code as the server, same messages),
+prints a summary, streams the file over SSH to the host, forwards the run log,
+and exits with the remote status. `--message`, `--host`, `--user`,
+`--identity`, `--port` and `--dry-run` are available; `DEPLOY_HOST`,
+`DEPLOY_USER`, `DEPLOY_KEY` and `DEPLOY_MESSAGE` are the environment
+equivalents. The controller host and key are the only configuration.
 
-1. unpacks the tar into the deploy repository and commits it (every deploy is a
-   commit, even when nothing changed);
-2. builds `deployer-run:<commit>` from `git archive <commit>`;
-3. runs that image once, with no network, a read-only root, `--cap-drop ALL`,
-   a non-root user, and a wall-clock cap, mounted to `/repo` (read-only),
-   `/work` (scratch) and the socket directory;
-4. revokes the run token and returns the log.
+The controller then:
 
-Deploy code does the reconciling. `examples/hello/index.js` inspects the live
-service, creates it, updates it when the config differs, and logs "up to date"
-when it already matches.
+1. decompresses and validates the package (a bad artifact is a 400, nothing is
+   committed);
+2. extracts it into the deploy repository and commits it — the history is the
+   artifact tree, so `git show` is the record;
+3. runs the runner image once with the package mounted read-only at `/deploy`:
+   no network, no Docker socket, read-only root, `--cap-drop ALL`, non-root,
+   512 MB, 1 CPU, 120 s;
+4. revokes the per-run token and returns the log.
+
+`/api/apply` builds nothing and installs nothing, so it does not need the
+registry. Keep it private: bind it to `127.0.0.1` and let CI reach it over SSH
+(see [deployer-sandbox](https://github.com/etienne-sandbox/deployer-sandbox),
+which uses a key restricted to a single apply command).
+
+## Docker
+
+Build the controller image and the runner image:
+
+```sh
+pnpm docker:build   # ghcr.io/etienne-dldc/deployer:dev
+pnpm base:build     # deployer-runner-base:dev (harness included)
+```
 
 ```sh
 DEPLOYER_DATA_DIR=/root/deployer-data docker run --rm \
@@ -96,111 +152,60 @@ DEPLOYER_DATA_DIR=/root/deployer-data docker run --rm \
   ghcr.io/etienne-dldc/deployer:dev
 ```
 
-In CI, do not publish the controller port: run `ssh user@host 'deploy <message>'`
-with the tar on stdin and a small remote script that posts it to
-`127.0.0.1:8787`. Restrict the key with
-`command="…/apply.mjs"` and `restrict` in `authorized_keys`, so it can only
-deploy. The controller's token never leaves the host that way.
+`/api/apply` controls Swarm, so it is not meant to be public. In CI, do not
+publish the port: run `ssh user@host 'deploy <message>'` with the package on
+stdin and a small remote script that posts it to `127.0.0.1:8787`. Restrict the
+key with `command="…/apply.mjs"` and `restrict` in `authorized_keys`, so it can
+only deploy; the controller's token never leaves the host.
 
-
-## Docker
-
-Build the controller image:
-
-```sh
-pnpm docker:build
-```
-
-Run it:
-
-```sh
-docker run --rm \
-  -p 127.0.0.1:8787:8787 \
-  -e DEPLOYER_TOKEN=change-me \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  -v "$PWD/.deployer:/app/.deployer" \
-  ghcr.io/etienne-dldc/deployer:dev
-```
-
-`/api/apply` builds images and controls Swarm, so it is not meant to be public:
-bind it to loopback and let CI reach it over SSH (see
-[deployer-sandbox](https://github.com/etienne-sandbox/deployer-sandbox), which
-streams the tar through an SSH key restricted to a single apply command).
-
-Images are published to
-`ghcr.io/etienne-dldc/deployer` by `.github/workflows/docker-publish.yml` on
-pushes to `main` and tags.
-
-Build the deploy-code base image:
-
-```sh
-pnpm base:build   # deployer-runner-base:dev
-```
+Rebuild the runner image whenever the harness changes (`pnpm base:build`).
 
 ## SDK
 
-The repository is one package; the npm artifact is generated in `build/npm` and
-is the only thing published.
+`@dldc/deployer-sdk` is types-only on purpose: deploy code imports it with
+`import type`, the imports disappear at build time, and the artifact needs no
+`node_modules`. A plain `tsc` build is therefore self-contained; a bundler works
+too and produces a smaller artifact.
 
 ```sh
-pnpm pack:sdk
-cd build/npm && npm pack --dry-run
+pnpm add -D @dldc/deployer-sdk
 ```
 
-`scripts/stage-sdk.ts` copies `dist/sdk`, scans the emitted `.mjs` and `.d.mts`
-files for package imports, and generates a `package.json` containing only the
-dependencies the SDK actually uses. The controller is built into
-`dist/controller` for the Docker image and is never part of the tarball.
+The wire contract is still the ts-api `Graph` in `sdk/graph.ts`; the harness
+implements `DeployContext` on top of it inside the run container, and the
+controller uses the same file as its resolver schema. The build copies it to
+`dist/controller/graph.ts` for the deployed image.
 
-Deploy code installs the SDK like any other dependency:
+## Publishing
+
+One version, one `v*` tag, two packages, both with npm
+[trusted publishing](https://docs.npmjs.com/trusted-publishers) (OIDC, no
+`NPM_TOKEN`, provenance attested):
+
+| Package | Folder | Workflow |
+| --- | --- | --- |
+| `@dldc/deployer-sdk` | `build/npm` | `publish-sdk.yml` |
+| `@dldc/deployer-cli` | `build/cli` | `publish-cli.yml` |
 
 ```sh
-pnpm add @dldc/deployer-sdk
+pnpm build && pnpm pack:sdk && pnpm pack:cli   # inspect both before tagging
+git tag v0.2.0 && git push origin v0.2.0
 ```
 
-Publishing goes through GitHub Actions, not a laptop: pushing a `v<version>` tag
-runs `.github/workflows/publish-sdk.yml`, which checks that the tag matches
-`package.json`, packs the SDK, and publishes with npm
-[trusted publishing](https://docs.npmjs.com/trusted-publishers) — the workflow
-gets a short-lived OIDC token, so there is no `NPM_TOKEN` secret, and the
-tarball ships a provenance attestation. To release `0.1.2`: bump the version,
-push the commit, then push the matching tag.
+The workflow finishing is not the same as the version being installable: npm can
+take several minutes to serve a fresh tarball even after the version shows up.
+Verify before announcing:
 
 ```sh
-pnpm build && pnpm pack:sdk   # inspect build/npm before tagging
-git tag v0.1.2 && git push origin v0.1.2
-```
-
-The workflow finishing is not the same as the version being installable: npm
-answers "Your package is being processed" and can take several minutes to serve
-the tarball, even though the version already shows up in the registry. Verify
-before announcing a release:
-
-```sh
-npm view @dldc/deployer-sdk@0.1.2 dist.attestations.provenance.predicateType
-npm install @dldc/deployer-sdk@0.1.2   # in a scratch project
+npm view @dldc/deployer-cli@0.2.0 dist.attestations.provenance.predicateType
+npx @dldc/deployer-cli@0.2.0 --help
 npm audit signatures
 ```
 
-The API is a ts-api `Graph` defined in `sdk/graph.ts`. The SDK exports the
-typed query builder `q`, `executeQuery`, and `equal`:
-
-```ts
-import { executeQuery, q } from "@dldc/deployer-sdk";
-
-const version = await executeQuery(q.Graph.meta.version());
-```
-
-`executeQuery` reads `DEPLOYER_SOCKET` and `DEPLOYER_RUN_TOKEN` from the run
-environment; the controller uses the same `Graph` as its resolver contract. A
-failed call rejects with the controller's message (`Unauthorized: ...`, or the
-argument validation error) instead of returning an error object.
-
-The controller parses `sdk/graph.ts` itself, so the schema file is the single
-wire contract for both sides. The build copies it to `dist/controller/graph.ts`
-for the deployed image.
+A new package needs its trusted publisher configured on npmjs.com (repository +
+workflow file) and one manual first publish, like the SDK's `0.1.0`.
 
 ## Design
 
-- [`plans/code-deployment-architecture.md`](./plans/code-deployment-architecture.md)
+- [`plans/code-as-package.md`](./plans/code-as-package.md)
 - [`plans/code-deployment-mvp.md`](./plans/code-deployment-mvp.md)

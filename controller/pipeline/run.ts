@@ -13,8 +13,8 @@ export interface RunDeployContainerOptions {
   runId: string;
   /** Per-run token, revoked by the caller when the run ends. */
   token: string;
-  /** Host path of the deploy repository, mounted read-only at `/repo`. */
-  repoDir: string;
+  /** Host path of the unpacked deploy package, mounted read-only at `/deploy`. */
+  packageDir: string;
   /** Host path of the run's scratch folder, mounted at `/work`. */
   workDir: string;
   /** Host path of the socket directory, mounted at `/run/deployer`. */
@@ -22,6 +22,8 @@ export interface RunDeployContainerOptions {
   timeoutMs?: number;
   onOutput?: (text: string) => void;
 }
+
+export const HARNESS_PATH = "/opt/deployer/harness.mjs";
 
 export interface RunDeployContainerResult {
   exitCode: number | null;
@@ -49,8 +51,14 @@ export async function runDeployContainer(
   const container = await docker.createContainer({
     name: `${RUN_CONTAINER_PREFIX}${options.runId}`,
     Image: options.image,
+    Cmd: ["node", "--enable-source-maps", HARNESS_PATH],
+    WorkingDir: "/deploy",
     Labels: { [RUN_LABEL]: options.runId },
-    Env: ["DEPLOYER_SOCKET=/run/deployer/deployer.sock", `DEPLOYER_RUN_TOKEN=${options.token}`],
+    Env: [
+      "DEPLOYER_SOCKET=/run/deployer/deployer.sock",
+      "DEPLOYER_PACKAGE_DIR=/deploy",
+      `DEPLOYER_RUN_TOKEN=${options.token}`,
+    ],
     Tty: false,
     User: "1000:1000",
     HostConfig: {
@@ -62,7 +70,7 @@ export async function runDeployContainer(
       Memory: MEMORY_LIMIT_BYTES,
       NanoCpus: NANO_CPUS,
       Binds: [
-        `${options.repoDir}:/repo:ro`,
+        `${options.packageDir}:/deploy:ro`,
         `${options.workDir}:/work`,
         `${options.socketDir}:/run/deployer`,
       ],

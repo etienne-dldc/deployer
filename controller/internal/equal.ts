@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import type { EnvVar, Label, ServiceConfig, ServicePort } from "./graph.ts";
+import type { EnvVar, Label, ServiceConfig, ServicePort } from "../../sdk/graph.ts";
 
 /**
  * Compare a desired `ServiceConfig` with `inspect().config`.
