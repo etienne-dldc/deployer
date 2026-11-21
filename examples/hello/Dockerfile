@@ -8,9 +8,8 @@ WORKDIR /app
 
 COPY package.json ./
 
-# Until @dldc/deployer-sdk is published, the base image carries the staged SDK
-# built from this repository at /opt/deployer-sdk.
-RUN pnpm add file:/opt/deployer-sdk
+# The SDK is a normal npm dependency, like in any other deploy repo.
+RUN pnpm add @dldc/deployer-sdk@^0.1.1
 
 COPY index.js ./
 

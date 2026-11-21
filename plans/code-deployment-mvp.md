@@ -286,11 +286,9 @@ Changing `WHOAMI_NAME` and re-deploying must update the service and change the
 
 ## Implementation notes
 
-- **Base image:** `node:26-slim` + pnpm; tag `deployer-runner-base:dev`. It
-  carries the staged SDK at `/opt/deployer-sdk` for the moment, because the
-  package is not published yet; deploy repos install it as
-  `file:/opt/deployer-sdk`. Once `@dldc/deployer-sdk` is on npm, drop the copy
-  and the base image stays generic.
+- **Base image:** `node:26-slim` + pnpm; tag `deployer-runner-base:dev`. It is
+  generic: deploy repos install `@dldc/deployer-sdk` from npm like any other
+  dependency.
 - **Public route:** `POST /api/apply[?message=<text>]` accepts the raw tar body
   (`application/x-tar`), checks the bearer token against
   `DEPLOYER_TOKEN`, and returns the run result. The controller refuses to
@@ -343,15 +341,13 @@ Changing `WHOAMI_NAME` and re-deploying must update the service and change the
 ## After the MVP
 
 1. SQLite run log/state, replacing the in-memory run result.
-2. Publish `@dldc/deployer-sdk` and drop the `/opt/deployer-sdk` copy from the
-   runner base image.
-3. Image garbage collection: `deployer-run:<commit>` images accumulate one per
+2. Image garbage collection: `deployer-run:<commit>` images accumulate one per
    deploy.
-4. Configs and secrets (env injection) on the same service.
-5. Managed data folders and mounts.
-6. Networks and two-service ordering (app + edge).
-7. MessagePack/binary and image digests.
-8. Controller in Swarm, bootstrap, self-hosting.
-9. Public read graph/UI, log streaming, rollback/restore/backups.
-10. Multiple deploy entrypoints within the one repo, if run granularity becomes a
-    problem.
+3. Configs and secrets (env injection) on the same service.
+4. Managed data folders and mounts.
+5. Networks and two-service ordering (app + edge).
+6. MessagePack/binary and image digests.
+7. Controller in Swarm, bootstrap, self-hosting.
+8. Public read graph/UI, log streaming, rollback/restore/backups.
+9. Multiple deploy entrypoints within the one repo, if run granularity becomes a
+   problem.

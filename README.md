@@ -31,10 +31,8 @@ The Docker side was already in place: `ServiceConfig` ↔ Swarm conversion, the
 internal `service` primitives (`inspect`, `list`, `create`, `update`, `remove`)
 plus `wait.serviceConverged` behind a per-run-token Unix socket.
 
-Two things are deliberately not done yet: the SDK is not published on npm
-(deploy repos install it from the runner base image, see below), and the
-controller keeps exactly one deploy repository and one socket, so applies are
-serialized.
+One thing is deliberately not done yet: the controller keeps exactly one deploy
+repository and one socket, so applies are serialized.
 
 ## Development
 
@@ -149,10 +147,18 @@ Deploy code installs the SDK like any other dependency:
 pnpm add @dldc/deployer-sdk
 ```
 
-Until it is published, `pnpm base:build` stages the SDK into the runner base
-image at `/opt/deployer-sdk`, and deploy repos install it from there
-(`pnpm add file:/opt/deployer-sdk`, as `examples/hello/Dockerfile` does). Once
-the package is on npm, that line becomes a normal registry install.
+Publishing goes through GitHub Actions, not a laptop: pushing a `v<version>` tag
+runs `.github/workflows/publish-sdk.yml`, which checks that the tag matches
+`package.json`, packs the SDK, and publishes with npm
+[trusted publishing](https://docs.npmjs.com/trusted-publishers) — the workflow
+gets a short-lived OIDC token, so there is no `NPM_TOKEN` secret, and the
+tarball ships a provenance attestation. To release `0.1.2`: bump the version,
+push the commit, then push the matching tag.
+
+```sh
+pnpm build && pnpm pack:sdk   # inspect build/npm before tagging
+git tag v0.1.2 && git push origin v0.1.2
+```
 
 The API is a ts-api `Graph` defined in `sdk/graph.ts`. The SDK exports the
 typed query builder `q`, `executeQuery`, and `equal`:

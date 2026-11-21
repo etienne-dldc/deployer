@@ -1,6 +1,6 @@
 {
   "name": "@dldc/deployer-sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "SDK for @dldc/deployer — the code-as-deployment engine for Docker Swarm",
   "keywords": [
@@ -52,7 +52,7 @@
     "test": "vp test run",
     "test:watch": "vp test",
     "test:docker": "DEPLOYER_TEST_DOCKER=1 vp test run integration",
-    "base:build": "pnpm pack:sdk && docker build -f docker/runner-base/Dockerfile -t deployer-runner-base:dev .",
+    "base:build": "docker build -f docker/runner-base/Dockerfile -t deployer-runner-base:dev .",
     "docker:build": "docker build -t ghcr.io/etienne-dldc/deployer:dev .",
     "deploy": "tsx cli/main.ts deploy",
     "deployer": "tsx cli/main.ts"
