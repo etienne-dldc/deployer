@@ -204,7 +204,20 @@ npm audit signatures
 ```
 
 A new package needs its trusted publisher configured on npmjs.com (repository +
-workflow file) and one manual first publish, like the SDK's `0.1.0`.
+workflow file) and one manual first publish, like the SDK's `0.1.0`. Because the
+trusted-publisher settings only exist once a package does, the first CLI release
+bootstraps the name with a throwaway version:
+
+```sh
+npm login
+pnpm bootstrap:cli        # publishes @dldc/deployer-cli@0.0.0
+```
+
+Then add the trusted publisher for `@dldc/deployer-cli`: GitHub Actions,
+repository `etienne-dldc/deployer`, workflow `publish-cli.yml`, no environment,
+with `npm publish` allowed. Do it right before tagging — an unused trusted
+publisher is dropped after 48 hours — then tag as above; the tag publishes
+`0.2.0` for both packages with provenance.
 
 ## Design
 

@@ -113,7 +113,9 @@ One version, one `v*` tag, two packages:
 - `@dldc/deployer-cli` → `build/cli` (`publish-cli.yml`)
 
 Both use npm trusted publishing (OIDC). The CLI needs its trusted publisher
-configured on npmjs.com and one manual first publish.
+configured on npmjs.com and one manual first publish; `pnpm bootstrap:cli`
+publishes a throwaway `0.0.0` so the package name exists before the trusted
+publisher is attached.
 
 ## Migration
 

@@ -51,6 +51,7 @@
     "pack:tarball": "cd build/npm && npm pack",
     "publish:sdk": "pnpm pack:sdk && cd build/npm && npm publish --access public",
     "publish:cli": "pnpm pack:cli && cd build/cli && npm publish --access public",
+    "bootstrap:cli": "pnpm pack:cli && cd build/cli && npm pkg set version=0.0.0 && npm publish --access public",
     "check": "vp check",
     "lint": "vp lint",
     "fmt": "vp fmt",
