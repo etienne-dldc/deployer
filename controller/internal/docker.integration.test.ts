@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { executeQuery, q } from "../../sdk/execute.ts";
+import { equal } from "../../sdk/equal.ts";
 import type { ServiceConfig } from "../../sdk/graph.ts";
 import { PROTOCOL_VERSION } from "../../sdk/protocol.ts";
 import { createDockerClient } from "../docker/client.ts";
@@ -96,7 +97,8 @@ describe.skipIf(!enabled)("docker integration", () => {
     expect(created.version).toBeGreaterThan(0);
 
     const live = await executeQuery(q.Graph.service.inspect(name), options);
-    expect(live?.config).toEqual(desired);
+    expect(live).not.toBeNull();
+    expect(equal(live?.config, desired)).toBe(true);
     expect(live?.version).toBe(created.version);
 
     const all = await executeQuery(q.Graph.service.list(), options);

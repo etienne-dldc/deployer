@@ -38,6 +38,22 @@ describe("toSwarm", () => {
     });
   });
 
+  it("sorts env and labels so writes are canonical", () => {
+    const spec = toSwarm({
+      image: "nginx",
+      replicas: 1,
+      env: [
+        { name: "B", value: "2" },
+        { name: "A", value: "1" },
+      ],
+    });
+
+    const taskSpec = spec.TaskTemplate;
+    const containerSpec =
+      taskSpec && "ContainerSpec" in taskSpec ? taskSpec.ContainerSpec : undefined;
+    expect(containerSpec).toMatchObject({ Env: ["A=1", "B=2"] });
+  });
+
   it("rejects reserved deployer labels", () => {
     expect(() =>
       toSwarm({

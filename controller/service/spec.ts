@@ -33,7 +33,9 @@ export function toSwarm(config: ServiceConfig): ServiceSpec {
     containerSpec.Command = [...config.command];
   }
   if (Object.keys(env).length > 0) {
-    containerSpec.Env = Object.entries(env).map(([name, value]) => `${name}=${value}`);
+    containerSpec.Env = Object.keys(env)
+      .sort()
+      .map((name) => `${name}=${env[name]}`);
   }
 
   const spec: ServiceSpec = {
