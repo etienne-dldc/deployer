@@ -50,6 +50,7 @@
     "fmt": "vp fmt",
     "test": "vp test run",
     "test:watch": "vp test",
+    "test:docker": "DEPLOYER_TEST_DOCKER=1 vp test run integration",
     "base:build": "docker build -f docker/runner-base/Dockerfile -t deployer-runner-base:dev .",
     "docker:build": "docker build -t ghcr.io/etienne-dldc/deployer:dev ."
   },
