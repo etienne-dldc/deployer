@@ -16,6 +16,14 @@ export class UsageError extends Error {
   }
 }
 
+/** `-h`/`--help`: print the usage and exit successfully. */
+export class HelpRequested extends Error {
+  constructor() {
+    super(USAGE);
+    this.name = "HelpRequested";
+  }
+}
+
 export const USAGE = `usage: deployer deploy <package.tgz> [options]
 
 The argument is the .tgz produced by \`npm pack\` (or \`pnpm pack\`) after the
@@ -38,7 +46,10 @@ options:
 export function parseArgs(argv: string[], env: NodeJS.ProcessEnv): DeployOptions {
   const [command, file, ...rest] = argv;
 
-  if (command === undefined || command === "-h" || command === "--help") {
+  if (command === "-h" || command === "--help") {
+    throw new HelpRequested();
+  }
+  if (command === undefined) {
     throw new UsageError(USAGE);
   }
   if (command !== "deploy") {
@@ -79,7 +90,7 @@ export function parseArgs(argv: string[], env: NodeJS.ProcessEnv): DeployOptions
         break;
       case "-h":
       case "--help":
-        throw new UsageError(USAGE);
+        throw new HelpRequested();
       default:
         throw new UsageError(`unknown option: ${arg}\n\n${USAGE}`);
     }

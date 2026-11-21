@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { UsageError, parseArgs, sanitizeMessage } from "./args.ts";
+import { HelpRequested, UsageError, parseArgs, sanitizeMessage } from "./args.ts";
 
 const base = { DEPLOY_HOST: "deploy.example.com" };
 
@@ -65,6 +65,12 @@ describe("parseArgs", () => {
     expect(() => parseArgs(["deploy", "a.tgz", "--nope"], base)).toThrow(/unknown option/);
     expect(() => parseArgs(["deploy", "a.tgz", "--message"], base)).toThrow(/needs a value/);
     expect(() => parseArgs(["deploy", "a.tgz", "--port", "0"], base)).toThrow(/invalid ssh port/);
+  });
+
+  it("treats help as a request, not an error", () => {
+    expect(() => parseArgs(["--help"], base)).toThrow(HelpRequested);
+    expect(() => parseArgs(["-h"], base)).toThrow(HelpRequested);
+    expect(() => parseArgs(["deploy", "a.tgz", "--help"], base)).toThrow(HelpRequested);
   });
 });
 

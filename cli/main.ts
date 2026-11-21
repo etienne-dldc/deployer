@@ -6,7 +6,13 @@ import {
   readDeployPackage,
   type DeployPackage,
 } from "../artifact/index.ts";
-import { UsageError, parseArgs, sanitizeMessage, type DeployOptions } from "./args.ts";
+import {
+  HelpRequested,
+  UsageError,
+  parseArgs,
+  sanitizeMessage,
+  type DeployOptions,
+} from "./args.ts";
 import { sshArgs } from "./ssh.ts";
 
 /**
@@ -21,6 +27,10 @@ async function main(argv: string[], env: NodeJS.ProcessEnv): Promise<number> {
   try {
     options = parseArgs(argv, env);
   } catch (error) {
+    if (error instanceof HelpRequested) {
+      console.log(error.message);
+      return 0;
+    }
     if (error instanceof UsageError) {
       console.error(error.message);
       return 2;
