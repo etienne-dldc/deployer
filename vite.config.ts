@@ -78,7 +78,8 @@ export default defineConfig({
     {
       name: "harness",
       entry: {
-        main: "controller/harness.ts",
+        // The runner image and `HARNESS_PATH` both expect harness.mjs.
+        harness: "controller/harness.ts",
       },
       outDir: "dist/harness",
       format: ["esm"],
