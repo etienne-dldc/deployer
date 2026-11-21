@@ -160,6 +160,17 @@ pnpm build && pnpm pack:sdk   # inspect build/npm before tagging
 git tag v0.1.2 && git push origin v0.1.2
 ```
 
+The workflow finishing is not the same as the version being installable: npm
+answers "Your package is being processed" and can take several minutes to serve
+the tarball, even though the version already shows up in the registry. Verify
+before announcing a release:
+
+```sh
+npm view @dldc/deployer-sdk@0.1.2 dist.attestations.provenance.predicateType
+npm install @dldc/deployer-sdk@0.1.2   # in a scratch project
+npm audit signatures
+```
+
 The API is a ts-api `Graph` defined in `sdk/graph.ts`. The SDK exports the
 typed query builder `q`, `executeQuery`, and `equal`:
 
